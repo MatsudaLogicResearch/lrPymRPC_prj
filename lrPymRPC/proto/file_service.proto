@@ -1,0 +1,73 @@
+//===================================================================
+// This file is part of lrPymRPC.
+// Copyright (C) 2025 LogicResearch K.K (Author: MATSUDA Masahiro)
+// 
+// This script file is licensed under the MIT License.
+//===================================================================
+syntax = "proto3";
+
+service FileService {
+    // データアップロード
+    rpc Upload (stream DataChunk) returns (UploadResponse);
+
+    // コマンド実行
+    rpc Execute (ExecuteRequest) returns (stream ExecuteResponse);
+
+    // 実行結果をチェック
+    rpc Check (CheckRequest) returns (CheckResponse);
+
+    // 実行結果をダウンロード
+    rpc Download (DownloadRequest) returns (stream DataChunk);
+}
+
+message DataChunk {
+    bytes data = 1;  // 圧縮データのチャンク
+}
+
+//-----------------------------------------------------------
+// アップロード
+//-- レスポンス
+message UploadResponse {
+    string unique_id = 1;  // ID
+}
+
+
+//-----------------------------------------------------------
+// コマンド
+//-- リクエスト
+message ExecuteRequest {
+    string unique_id = 1;  // ID
+    string tool      = 2;    // 実行するツール
+    string command_opt = 3;    // 実行するコマンドオプション
+}
+
+
+//-- レスポンス
+message ExecuteResponse {
+    string message = 1;  // コマンド実行結果のメッセージ
+}
+
+
+//-----------------------------------------------------------
+// チェック
+//-- リクエスト
+message CheckRequest {
+    string unique_id = 1;  // ID
+    string result_dir = 2;    // result directory
+}
+
+
+//-- レスポンス
+message CheckResponse {
+    bool has_stream  = 1;
+}
+
+
+//-----------------------------------------------------------
+// ダウンロード
+//-- リクエスト
+message DownloadRequest {
+    string unique_id = 1;  // ID
+    string result_dir = 2;    // result directory
+}
+
