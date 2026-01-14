@@ -16,7 +16,7 @@ import tarfile
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 def upload(stub, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -147,7 +147,7 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
 def main():
     pars = argparse.ArgumentParser()
     pars.add_argument('-v',"--version"     ,action='version', version=f'%(prog)s {__version__}')
-    pars.add_argument('--REPO_URL'    ,type=str ,default="git+https://github.com/MatsudaLogicResearch/charao_prj.git@main"     ,help="git repository for module.")
+    pars.add_argument('--REPO_URL'    ,type=str ,default="charao=git+https://github.com/MatsudaLogicResearch/charao_prj.git@main"     ,help="repo mapping string(name=url,name=url,)")
     pars.add_argument('--CMD'         ,type=str ,default="charao -h"  ,help="command & parameters to module.")
     pars.add_argument('--SERVER_IP'   ,type=str ,default="127.0.0.1"  ,help="IP address of RPC server")
     pars.add_argument('--SERVER_PORT' ,type=str ,default="8766"       ,help="TCP port of RCP server")
