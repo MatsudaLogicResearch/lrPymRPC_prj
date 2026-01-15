@@ -204,9 +204,17 @@ def main():
       with open(cacrt, "rb") as f:
         ca_crt = f.read()
 
-    #
-    source = re.sub(r'\s+', ' ', args.SOURCE); #--  bind args
-    result = re.sub(r'\s+', ' ', args.RESULT); #--  bind args
+    # SOURCE の処理
+    source = " ".join(str(x) for x in args.SOURCE)  # まず全て結合して文字列化
+    source = re.sub(r'\s+', ' ', source).strip()    # 連続空白を1つにまとめて前後空白を削除
+    if not source:                                   # 空文字列なら ""
+       source = ""
+
+    # RESULT の処理
+    result = " ".join(str(x) for x in args.RESULT)
+    result = re.sub(r'\s+', ' ', result).strip()
+    if not result:
+      result = ""
     
     #
     run(tool       =args.REPO_URL, 
