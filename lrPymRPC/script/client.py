@@ -80,15 +80,25 @@ def download(stub,unique_id, result_dir, result_gz):
     print("Result downloaded and saved as result.tar.gz.")
 
         
-def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", source="source", result="build"):
+def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build"):
     # gRPCチャンネルを作成
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
 
+    # ======== 認証処理 ========
+    creds = grpc.ssl_channel_credentials(
+        root_certificates=ca_crt,
+        private_key=client_key,
+        certificate_chain=client_crt,
+    )
+    
     ip_port=server_ip+":"+server_port
-    channel = grpc.insecure_channel(ip_port)
+
+    #channel = grpc.insecure_channel(ip_port)
+    channel = grpc.secure_channel(ip_port, creds)
     stub = file_service_pb2_grpc.FileServiceStub(channel)
 
+    # ======== SOURCEファイル準備 ========
     # ディレクトリをtar.gzに圧縮
     source_dir = source
     result_dir = result
@@ -108,17 +118,20 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
           tar.add(f, arcname=os.path.basename(f))
 
         
+    # ======== UPLOAD処理 ========
     # データをアップロードしてIDを受け取る
     print("["+ip_port+"]:"+"Upload")
     unique_id = upload(stub, source_gz)
     
     print("["+ip_port+"]:"+"unique id="+unique_id)
 
+    # ======== CMD処理 ========
     # コマンドを送信し、出力をリアルタイムで受け取る
     print("["+ip_port+"]:"+"pip install   ="+tool)
     print("["+ip_port+"]:"+"Execute target="+target)
     execute(stub, unique_id, tool, target)    
 
+    # ======== RESULT受信処理 ========
     # 実行結果の有無をチェック
     print("["+ip_port+"]:"+"Check result.")
     has_stream = check(stub, unique_id, result_dir)
@@ -153,13 +166,46 @@ def main():
     pars.add_argument('--SERVER_PORT' ,type=str ,default="8766"       ,help="TCP port of RCP server")
     pars.add_argument('--SOURCE'      ,type=str ,default=["source"]     ,nargs="+" ,help="source direcrory used in make command.")
     pars.add_argument('--RESULT'      ,type=str ,default=["build"]      ,nargs="+" ,help="result direcrory output by make commnand.")
+    pars.add_argument('--TLS_CONFIG_DIR'    ,default="tls"  ,help="TLS configuration directory")
     
     args = pars.parse_args()
+
+    #
+    clkey=f"{args.TLS_CONFIG_DIR}/client/client.key"
+    clcrt=f"{args.TLS_CONFIG_DIR}/client/client.crt"
+    cacrt=f"{args.TLS_CONFIG_DIR}/ca/ca.crt"
     
+    if not os.path.exists(clkey):
+      msg=f"ERROR: {clkey} file is not exist."
+      print(msg)
+      return
+    else:
+      with open(clkey, "rb") as f:
+        client_key = f.read()
+        
+    if not os.path.exists(clcrt):
+      msg=f"ERROR: {clcrt} file is not exist."
+      print(msg)
+      return
+    else:
+      with open(clcrt, "rb") as f:
+        client_crt = f.read()
+
+    if not os.path.exists(cacrt):
+      msg=f"ERROR: {cacrt} file is not exist."
+      print(msg)
+      return
+    else:
+      with open(cacrt, "rb") as f:
+        ca_crt = f.read()
+
     run(tool       =args.REPO_URL, 
         target     =args.CMD,
         server_ip  =args.SERVER_IP, 
-        server_port=args.SERVER_PORT, 
+        server_port=args.SERVER_PORT,
+        client_key =client_key,
+        client_crt =client_crt,
+        ca_crt     =ca_crt,
         source     =" ".join(args.SOURCE), 
         result     =" ".join(args.RESULT))
     
