@@ -16,7 +16,7 @@ import tarfile
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 def upload(stub, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -85,9 +85,9 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
 
-    print("client_key:", type(client_key), client_key is None)
-    print("client_crt:", type(client_crt), client_crt is None)
-    print("ca_crt    :", type(ca_crt), ca_crt is None)
+    #print("client_key:", type(client_key), client_key is None)
+    #print("client_crt:", type(client_crt), client_crt is None)
+    #print("ca_crt    :", type(ca_crt), ca_crt is None)
 
     # ======== 認証処理 ========
     creds = grpc.ssl_channel_credentials(
