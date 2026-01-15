@@ -12,11 +12,12 @@ import argparse
 import grpc
 import os
 import tarfile
+import re
 
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 def upload(stub, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -203,6 +204,11 @@ def main():
       with open(cacrt, "rb") as f:
         ca_crt = f.read()
 
+    #
+    source = re.sub('\s+', ' ', args.SOURCE); #--  bind args
+    result = re.sub('\s+', ' ', args.RESULT); #--  bind args
+    
+    #
     run(tool       =args.REPO_URL, 
         target     =args.CMD,
         server_ip  =args.SERVER_IP, 
@@ -210,8 +216,8 @@ def main():
         client_key =client_key,
         client_crt =client_crt,
         ca_crt     =ca_crt,
-        source     =" ".join(args.SOURCE), 
-        result     =" ".join(args.RESULT))
+        source     =source, 
+        result     =result)
     
 if __name__ == '__main__':
     main()
