@@ -205,8 +205,8 @@ def main():
         ca_crt = f.read()
 
     #
-    source = re.sub('\s+', ' ', args.SOURCE); #--  bind args
-    result = re.sub('\s+', ' ', args.RESULT); #--  bind args
+    source = re.sub(r'\s+', ' ', args.SOURCE); #--  bind args
+    result = re.sub(r'\s+', ' ', args.RESULT); #--  bind args
     
     #
     run(tool       =args.REPO_URL, 
