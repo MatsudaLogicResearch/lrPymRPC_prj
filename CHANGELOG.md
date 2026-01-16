@@ -3,6 +3,9 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.2.3] 2026-01-16
+### README: update
+
 ## [0.2.1] 2026-01-15
 ### modified args.SOURCE/args.RESULT.
 

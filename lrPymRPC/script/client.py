@@ -18,7 +18,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -185,17 +185,14 @@ def main():
     pars.add_argument('--REPO_URL'    ,type=str ,default=""     ,help="repo mapping string(name=url,name=url,)")
     pars.add_argument('--CMD'         ,type=str ,default="charao -h"  ,help="command & parameters to module.")
     pars.add_argument('--SERVER_IP'   ,type=str ,default="127.0.0.1"  ,help="IP address of RPC server")
-    pars.add_argument('--SERVER_PORT' ,type=str ,default="8766"       ,help="TCP port of RCP server")
-    pars.add_argument('--SOURCE'      ,type=str ,default=["source"]     ,nargs="+" ,help="source direcrory used in make command.")
-    pars.add_argument('--RESULT'      ,type=str ,default=["build"]      ,nargs="+" ,help="result direcrory output by make commnand.")
+    pars.add_argument('--SERVER_PORT' ,type=str ,default="8766"       ,help="TCP port of RPC server")
+    pars.add_argument('--SOURCE'      ,type=str ,default=["source"]     ,nargs="+" ,help="source directory used in make command.")
+    pars.add_argument('--RESULT'      ,type=str ,default=["build"]      ,nargs="+" ,help="result directory output by make command.")
     pars.add_argument('--TLS_CONFIG_DIR'    ,default="tls"  ,help="TLS configuration directory")
     
     args = pars.parse_args()
 
     #
-    #clkey=f"{args.TLS_CONFIG_DIR}/client/client.key"
-    #clcrt=f"{args.TLS_CONFIG_DIR}/client/client.crt"
-    #cacrt=f"{args.TLS_CONFIG_DIR}/ca/ca.crt"
     clkey=(Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.key").resolve()
     clcrt=(Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.crt").resolve()
     cacrt=(Path(args.TLS_CONFIG_DIR).expanduser() / "ca" / "ca.crt").resolve()
