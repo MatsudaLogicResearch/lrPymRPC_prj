@@ -156,7 +156,7 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     # ======== RESULT受信処理 ========
     # 実行結果の有無をチェック
     print(f"[{ip_port}]:Check result.")
-    has_stream = check(stub, unique_id, result_dir)
+    has_stream = check(stub, ip_port, unique_id, result_dir)
 
     # 実行結果を受け取って展開する
     if has_stream:
