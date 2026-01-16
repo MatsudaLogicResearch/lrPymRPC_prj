@@ -13,11 +13,12 @@ import grpc
 import os
 import tarfile
 import re
+from pathlib import Path
 
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 def upload(stub, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -50,7 +51,7 @@ def execute(stub, unique_id, tool, command_opt):
     # 実行結果（リアルタイム）を受け取る
     for response in response_iterator:
         msg=response.message
-        print(msg)
+        print(f"[{ip_port}]:{msg}")        
         #print(f"Success: {response.success}, Message: {response.message}")
         
     #print("Done: Execute")
@@ -78,7 +79,8 @@ def download(stub,unique_id, result_dir, result_gz):
         for chunk in result:
             result_file.write(chunk.data)
 
-    print("Result downloaded and saved as result.tar.gz.")
+    msg="Result downloaded and saved as result.tar.gz."
+    print(f"[{ip_port}]:{msg}")        
 
         
 def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build"):
@@ -108,59 +110,74 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     source_dir = source
     result_dir = result
 
-    #source_gz  = source_dir + '.tar.gz'
-    #result_gz  = result_dir + '.tar.gz'
     source_gz  = '_source.tar.gz'
     result_gz  = '_result.tar.gz'
     
-    print("["+ip_port+"]:"+"Compress source=" + source_dir)
+    msg="Compress source={source_dir}"
+    print(f"[{ip_port}]:{msg}")        
 
+    base_dir = (Path("./")).resolve()
+    
     #with tarfile.open(source_gz, 'w:gz') as tar:
     with tarfile.open(source_gz, 'w:gz', dereference=True) as tar:
-        for f in source_dir.split(" "):
-          #print(source_dir)
-          #print(f)
-          tar.add(f, arcname=os.path.basename(f))
+      for f in source_dir.split(" "):
+        source_path = (base_dir / f).resolve()
 
+        ## only current directory
+        if not source_path.is_relative_to(base_dir):
+          msg=f"Check: Not Exist in current directory. source_dir={f}"
+          print(f"[{ip_port}]:{msg}")
+          continue
+      
+        ## check exist
+        if not os.path.exists(source_path):
+          msg=f"Check: Not Exist source_dir={f}"
+          print(f"[{ip_port}]:{msg}")
+          continue
+
+        ## add files
+        msg=f"Check: Exist source_dir={f}"
+        print(f"[{ip_port}]:{msg}")
+        tar.add(f, arcname=os.path.basename(f))
         
     # ======== UPLOAD処理 ========
     # データをアップロードしてIDを受け取る
-    print("["+ip_port+"]:"+"Upload")
-    unique_id = upload(stub, source_gz)
+    print(f"[{ip_port}]:Upload")
     
-    print("["+ip_port+"]:"+"unique id="+unique_id)
+    unique_id = upload(stub, source_gz)
+    print(f"[{ip_port}]: unique id={unique_id}")
 
     # ======== CMD処理 ========
     # コマンドを送信し、出力をリアルタイムで受け取る
-    print("["+ip_port+"]:"+"pip install   ="+tool)
-    print("["+ip_port+"]:"+"Execute target="+target)
+    print(f"[{ip_port}] pip install   ={tool}")
+    print(f"[{ip_port}] Execute target={target}")
     execute(stub, unique_id, tool, target)    
 
     # ======== RESULT受信処理 ========
     # 実行結果の有無をチェック
-    print("["+ip_port+"]:"+"Check result.")
+    print(f"[{ip_port}]:Check result.")
     has_stream = check(stub, unique_id, result_dir)
 
     # 実行結果を受け取って展開する
     if has_stream:
-      print("["+ip_port+"]:"+"Download data is exist.")
+      print(f"[{ip_port}]: Download data is exist.")
       download(stub, unique_id, result_dir, result_gz)
     
       # 実行結果を展開
-      print("["+ip_port+"]:"+"Extract result.")
+      print(f"[{ip_port}]: Extract result.")
       with tarfile.open(result_gz, 'r:gz') as tar:
         tar.extractall()
     else:
-      print("["+ip_port+"]:"+"Download data is not exist.")
+      print(f"[{ip_port}]: Download data is not exist.")
 
     #-- remove tar.gz files
     for f in [source_gz, result_gz]:
       if os.path.isfile(f):
-        print("["+ip_port+"]:"+"remove archive file="+f )
+        print(f"[{ip_port}]: remove archive file={f}" )
         os.remove(f)
 
     #-- Finish
-    print("["+ip_port+"]:"+"Finish.")
+    print(f"[{ip_port}]: Finish.")
     
 def main():
     pars = argparse.ArgumentParser()
@@ -176,10 +193,13 @@ def main():
     args = pars.parse_args()
 
     #
-    clkey=f"{args.TLS_CONFIG_DIR}/client/client.key"
-    clcrt=f"{args.TLS_CONFIG_DIR}/client/client.crt"
-    cacrt=f"{args.TLS_CONFIG_DIR}/ca/ca.crt"
-    
+    #clkey=f"{args.TLS_CONFIG_DIR}/client/client.key"
+    #clcrt=f"{args.TLS_CONFIG_DIR}/client/client.crt"
+    #cacrt=f"{args.TLS_CONFIG_DIR}/ca/ca.crt"
+    clkey=Path(f"{args.TLS_CONFIG_DIR}/client/client.key").resolve()
+    clcrt=Path(f"{args.TLS_CONFIG_DIR}/client/client.crt").resolve()
+    cacrt=Path(f"{args.TLS_CONFIG_DIR}/ca/ca.crt").resolve()
+
     if not os.path.exists(clkey):
       msg=f"ERROR: {clkey} file is not exist."
       print(msg)
