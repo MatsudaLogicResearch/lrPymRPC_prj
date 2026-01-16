@@ -196,9 +196,9 @@ def main():
     #clkey=f"{args.TLS_CONFIG_DIR}/client/client.key"
     #clcrt=f"{args.TLS_CONFIG_DIR}/client/client.crt"
     #cacrt=f"{args.TLS_CONFIG_DIR}/ca/ca.crt"
-    clkey=Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.key").resolve()
-    clcrt=Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.crt").resolve()
-    cacrt=Path(args.TLS_CONFIG_DIR).expanduser() / "ca" / "ca.crt").resolve()
+    clkey=(Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.key").resolve()
+    clcrt=(Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.crt").resolve()
+    cacrt=(Path(args.TLS_CONFIG_DIR).expanduser() / "ca" / "ca.crt").resolve()
 
     if not os.path.exists(clkey):
       msg=f"ERROR: {clkey} file is not exist."
