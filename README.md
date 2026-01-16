@@ -49,7 +49,7 @@ openssl req -new \
   -subj "/CN=<username>" \
   -out client.csr
 ```
->Replace <username> with the name assigned by the server administrator.
+>Replace < username> with the name assigned by the server administrator.
 
 - Send client.csr to the server administrator:
 
