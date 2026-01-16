@@ -125,7 +125,7 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
 
         ## only current directory
         if not source_path.is_relative_to(base_dir):
-          msg=f"Check: Not Exist in current directory. source_dir={f}"
+          msg=f"Check: Not Exist in current directory, removed from source_dir={f}"
           print(f"[{ip_port}]:{msg}")
           continue
       
@@ -145,39 +145,39 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     print(f"[{ip_port}]:Upload")
     
     unique_id = upload(stub, ip_port, source_gz)
-    print(f"[{ip_port}]: unique id={unique_id}")
+    print(f"[{ip_port}]:Upload: unique id={unique_id}")
 
     # ======== CMD処理 ========
     # コマンドを送信し、出力をリアルタイムで受け取る
-    print(f"[{ip_port}] pip install   ={tool}")
-    print(f"[{ip_port}] Execute target={target}")
+    print(f"[{ip_port}]:Upload: pip install   ={tool}")
+    print(f"[{ip_port}]:Upload: Execute target={target}")
     execute(stub, ip_port, unique_id, tool, target)    
 
     # ======== RESULT受信処理 ========
     # 実行結果の有無をチェック
-    print(f"[{ip_port}]:Check result.")
+    print(f"[{ip_port}]:Check: result.")
     has_stream = check(stub, ip_port, unique_id, result_dir)
 
     # 実行結果を受け取って展開する
     if has_stream:
-      print(f"[{ip_port}]: Download data is exist.")
+      print(f"[{ip_port}]:Check: Download data is exist.")
       download(stub, ip_port, unique_id, result_dir, result_gz)
     
       # 実行結果を展開
-      print(f"[{ip_port}]: Extract result.")
+      print(f"[{ip_port}]:Check: Extract result.")
       with tarfile.open(result_gz, 'r:gz') as tar:
         tar.extractall()
     else:
-      print(f"[{ip_port}]: Download data is not exist.")
+      print(f"[{ip_port}]:Check: Download data is not exist.")
 
     #-- remove tar.gz files
     for f in [source_gz, result_gz]:
       if os.path.isfile(f):
-        print(f"[{ip_port}]: remove archive file={f}" )
+        print(f"[{ip_port}]:Check: remove archive file={f}" )
         os.remove(f)
 
     #-- Finish
-    print(f"[{ip_port}]: Finish.")
+    print(f"[{ip_port}]:Finish: done.")
     
 def main():
     pars = argparse.ArgumentParser()
@@ -196,9 +196,9 @@ def main():
     #clkey=f"{args.TLS_CONFIG_DIR}/client/client.key"
     #clcrt=f"{args.TLS_CONFIG_DIR}/client/client.crt"
     #cacrt=f"{args.TLS_CONFIG_DIR}/ca/ca.crt"
-    clkey=Path(f"{args.TLS_CONFIG_DIR}/client/client.key").resolve()
-    clcrt=Path(f"{args.TLS_CONFIG_DIR}/client/client.crt").resolve()
-    cacrt=Path(f"{args.TLS_CONFIG_DIR}/ca/ca.crt").resolve()
+    clkey=Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.key").resolve()
+    clcrt=Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.crt").resolve()
+    cacrt=Path(args.TLS_CONFIG_DIR).expanduser() / "ca" / "ca.crt").resolve()
 
     if not os.path.exists(clkey):
       msg=f"ERROR: {clkey} file is not exist."
