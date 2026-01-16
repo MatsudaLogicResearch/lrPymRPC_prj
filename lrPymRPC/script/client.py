@@ -18,7 +18,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -113,7 +113,7 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     source_gz  = '_source.tar.gz'
     result_gz  = '_result.tar.gz'
     
-    msg="Compress source={source_dir}"
+    msg=f"Compress source={source_dir}"
     print(f"[{ip_port}]:{msg}")        
 
     base_dir = (Path("./")).resolve()
