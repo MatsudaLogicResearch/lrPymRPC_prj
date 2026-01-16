@@ -20,7 +20,7 @@ from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
 __version__ = "0.2.2"
 
-def upload(stub, tar_gz_path):
+def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
     with open(tar_gz_path, 'rb') as f:
         # 送信するデータのチャンクを生成して送信
@@ -42,7 +42,7 @@ def chunk_file(file_obj, chunk_size=1*1024*1024):
         break
       yield file_service_pb2.DataChunk(data=chunk)
 
-def execute(stub, unique_id, tool, command_opt):
+def execute(stub, ip_port, unique_id, tool, command_opt):
 
     # コマンドを実行
     request = file_service_pb2.ExecuteRequest(unique_id=unique_id, tool=tool, command_opt=command_opt)
@@ -57,7 +57,7 @@ def execute(stub, unique_id, tool, command_opt):
     #print("Done: Execute")
 
 
-def check(stub, unique_id, result_dir):
+def check(stub, ip_port, unique_id, result_dir):
     #print("Check:")
 
     request = file_service_pb2.CheckRequest(unique_id=unique_id, result_dir=result_dir)
@@ -66,7 +66,7 @@ def check(stub, unique_id, result_dir):
     return response.has_stream
  
 
-def download(stub,unique_id, result_dir, result_gz):
+def download(stub, ip_port, unique_id, result_dir, result_gz):
     #print("Download:")
 
     # 実行結果をダウンロード
@@ -144,14 +144,14 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     # データをアップロードしてIDを受け取る
     print(f"[{ip_port}]:Upload")
     
-    unique_id = upload(stub, source_gz)
+    unique_id = upload(stub, ip_port, source_gz)
     print(f"[{ip_port}]: unique id={unique_id}")
 
     # ======== CMD処理 ========
     # コマンドを送信し、出力をリアルタイムで受け取る
     print(f"[{ip_port}] pip install   ={tool}")
     print(f"[{ip_port}] Execute target={target}")
-    execute(stub, unique_id, tool, target)    
+    execute(stub, ip_port, unique_id, tool, target)    
 
     # ======== RESULT受信処理 ========
     # 実行結果の有無をチェック
@@ -161,7 +161,7 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     # 実行結果を受け取って展開する
     if has_stream:
       print(f"[{ip_port}]: Download data is exist.")
-      download(stub, unique_id, result_dir, result_gz)
+      download(stub, ip_port, unique_id, result_dir, result_gz)
     
       # 実行結果を展開
       print(f"[{ip_port}]: Extract result.")
