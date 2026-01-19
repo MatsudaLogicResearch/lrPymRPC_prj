@@ -34,18 +34,21 @@ pip install git+https://github.com/MatsudaLogicResearch/lrPymRPC_prj.git
 - Create a TLS directory:
 ```
 >mkdir ~/.tls/tls_lrpymrpc
+>mkdir ~/.tls/tls_lrpymrpc/ca
+>mkdir ~/.tls/tls_lrpymrpc/client
+
 >cd    ~/.tls/tls_lrpymrpc
 ```
 
-- Generate a private key:
+- Generate a private key for Client:
 ```
->openssl genrsa -out client.key 2048
+openssl genrsa -out client.key 2048
 ```
 
-- Generate a Certificate Signing Request(CSR) :
+- Generate a Certificate Signing Request(CSR) for Client:
 ```
 openssl req -new \
-  -key client.key \
+  -key client/client.key \
   -subj "/CN=<username>" \
   -out client.csr
 ```
@@ -57,8 +60,13 @@ openssl req -new \
 
 - Keep crt files in your TLS directory:
 ```
-ls ~/.tls/tls_lrpymrpc
-#   client.key client.csr client.crt ca.crt
+ls ~/.tls/tls_lrpymrpc/*
+
+# ~/.tls/tls_lrpymrpc/client/client.key
+# ~/.tls/tls_lrpymrpc/client/client.crs
+# ~/.tls/tls_lrpymrpc/client/client.crt
+# ~/.tls/tls_lrpymrpc/ca/ca.crt
+
 ```
 
 ## USAGE
@@ -86,6 +94,7 @@ python -m lrPymRPC
   --SERVER_PORT SERVER_PORT  TCP port of RPC server \
   --SOURCE SOURCE [SOURCE ...] source directory used in make command. \
   --RESULT RESULT [RESULT ...] result directory output by make command. \
+	--TLS_CONFIG_DIR TLS_CONFIG_DIR TLS configuration directory\
                         
 ```
 
@@ -112,7 +121,7 @@ git clone git@github.com:snishizawa/libretto.git
 	python3 -m lrPymRPC \
 	--SERVER_IP 127.0.0.1 \
 	--REPO_URL "numpy=numpy" \
-	--TLS_CONFIG_DIR "~/.tls/tls_lrPymRPC" \
+	--TLS_CONFIG_DIR "~/.tls/tls_lrpymrpc" \
 	--CMD "python $(LIBRETTO) -b $(CMD_FILE)" \
 	--SOURCE "IHP130 cmd script work" \
 	--RESULT "$(LIB) $(MD) $(PROCESS_NAME).v" \
