@@ -18,7 +18,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -93,16 +93,22 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     #print("ca_crt    :", type(ca_crt), ca_crt is None)
 
     # ======== 認証処理 ========
-    creds = grpc.ssl_channel_credentials(
-        root_certificates=ca_crt,
-        private_key=client_key,
-        certificate_chain=client_crt,
-    )
-    
     ip_port=server_ip+":"+server_port
+    
+    if client_key:
+      creds = grpc.ssl_channel_credentials(
+          root_certificates=ca_crt,
+          private_key=client_key,
+          certificate_chain=client_crt,
+      )
+      
+      channel = grpc.secure_channel(ip_port, creds)
+      
+    else:
+      channel = grpc.insecure_channel(ip_port)
+      
 
-    #channel = grpc.insecure_channel(ip_port)
-    channel = grpc.secure_channel(ip_port, creds)
+    #--
     stub = file_service_pb2_grpc.FileServiceStub(channel)
 
     # ======== SOURCEファイル準備 ========
@@ -188,38 +194,43 @@ def main():
     pars.add_argument('--SERVER_PORT' ,type=str ,default="8766"       ,help="TCP port of RPC server")
     pars.add_argument('--SOURCE'      ,type=str ,default=["source"]     ,nargs="+" ,help="source directory used in make command.")
     pars.add_argument('--RESULT'      ,type=str ,default=["build"]      ,nargs="+" ,help="result directory output by make command.")
-    pars.add_argument('--TLS_CONFIG_DIR'    ,default="tls"  ,help="TLS configuration directory")
+    pars.add_argument('--TLS_CONFIG_DIR'    ,default=""  ,help="TLS configuration directory. if empty, Connection not use TLS.")
     
     args = pars.parse_args()
 
-    #
-    clkey=(Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.key").resolve()
-    clcrt=(Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.crt").resolve()
-    cacrt=(Path(args.TLS_CONFIG_DIR).expanduser() / "ca" / "ca.crt").resolve()
-
-    if not os.path.exists(clkey):
-      msg=f"ERROR: {clkey} file is not exist."
-      print(msg)
-      return
-    else:
-      with open(clkey, "rb") as f:
-        client_key = f.read()
-        
-    if not os.path.exists(clcrt):
-      msg=f"ERROR: {clcrt} file is not exist."
-      print(msg)
-      return
-    else:
-      with open(clcrt, "rb") as f:
-        client_crt = f.read()
-
-    if not os.path.exists(cacrt):
-      msg=f"ERROR: {cacrt} file is not exist."
-      print(msg)
-      return
-    else:
-      with open(cacrt, "rb") as f:
-        ca_crt = f.read()
+    # TLS setting
+    client_key = None
+    client_crt = None
+    ca_crt     = None
+    
+    if args.TLS_CONFIG_DIR:
+      clkey=(Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.key").resolve()
+      clcrt=(Path(args.TLS_CONFIG_DIR).expanduser() / "client" / "client.crt").resolve()
+      cacrt=(Path(args.TLS_CONFIG_DIR).expanduser() / "ca" / "ca.crt").resolve()
+      
+      if not os.path.exists(clkey):
+        msg=f"ERROR: {clkey} file is not exist."
+        print(msg)
+        return
+      else:
+        with open(clkey, "rb") as f:
+          client_key = f.read()
+          
+      if not os.path.exists(clcrt):
+        msg=f"ERROR: {clcrt} file is not exist."
+        print(msg)
+        return
+      else:
+        with open(clcrt, "rb") as f:
+          client_crt = f.read()
+      
+      if not os.path.exists(cacrt):
+        msg=f"ERROR: {cacrt} file is not exist."
+        print(msg)
+        return
+      else:
+        with open(cacrt, "rb") as f:
+          ca_crt = f.read()
 
     # SOURCE の処理
     source = " ".join(str(x) for x in args.SOURCE)  # まず全て結合して文字列化
