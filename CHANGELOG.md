@@ -3,6 +3,9 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.2.6] 2026-02-02
+### archive symbolic-link file.
+
 ## [0.2.5] 2026-01-21
 ### support on-TLS
 

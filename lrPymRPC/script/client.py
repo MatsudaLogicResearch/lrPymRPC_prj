@@ -18,7 +18,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.5"
+__version__ = "0.2.6"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -124,12 +124,15 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
 
     base_dir = (Path("./")).resolve()
     
-    #with tarfile.open(source_gz, 'w:gz') as tar:
     with tarfile.open(source_gz, 'w:gz', dereference=True) as tar:
       for f in source_dir.split(" "):
-        source_path = (base_dir / f).resolve()
+        #source_path = (base_dir / f).resolve()
+        source_path = (base_dir / f)
 
         ## only current directory
+        #print(f"f={f}")
+        #print(f"s={source_path}")
+        #print(f"b={base_dir}")
         if not source_path.is_relative_to(base_dir):
           msg=f"Check: Not Exist in current directory, removed from source_dir={f}"
           print(f"[{ip_port}]:{msg}")
