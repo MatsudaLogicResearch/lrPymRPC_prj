@@ -18,7 +18,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.6"
+__version__ = "0.2.7"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -83,7 +83,20 @@ def download(stub, ip_port, unique_id, result_dir, result_gz):
     print(f"[{ip_port}]:{msg}")        
 
         
-def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build"):
+def _make_tar_filter(include_exts, exclude_exts):
+    """tarfile フィルター生成。--SOURCE_INCLUDE / --SOURCE_EXCLUDE に対応。"""
+    def _filter(tarinfo):
+        if tarinfo.isdir():
+            return tarinfo  # ディレクトリは常に通す（再帰探索のため）
+        if include_exts and not any(tarinfo.name.endswith(e) for e in include_exts):
+            return None     # --SOURCE_INCLUDE 指定時：一致しないファイルは除外
+        if exclude_exts and any(tarinfo.name.endswith(e) for e in exclude_exts):
+            return None     # --SOURCE_EXCLUDE 指定時：一致するファイルは除外
+        return tarinfo
+    return _filter
+
+
+def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None):
     # gRPCチャンネルを作成
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
@@ -124,6 +137,8 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
 
     base_dir = (Path("./")).resolve()
     
+    tar_filter = _make_tar_filter(source_include or [], source_exclude or [])
+
     with tarfile.open(source_gz, 'w:gz', dereference=True) as tar:
       for f in source_dir.split(" "):
         #source_path = (base_dir / f).resolve()
@@ -147,7 +162,7 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
         ## add files
         msg=f"Check: Exist source_dir={f}"
         print(f"[{ip_port}]:{msg}")
-        tar.add(f, arcname=os.path.basename(f))
+        tar.add(f, arcname=os.path.basename(f), filter=tar_filter)
         
     # ======== UPLOAD処理 ========
     # データをアップロードしてIDを受け取る
@@ -195,8 +210,10 @@ def main():
     pars.add_argument('--CMD'         ,type=str ,default="charao -h"  ,help="command & parameters to module.")
     pars.add_argument('--SERVER_IP'   ,type=str ,default="127.0.0.1"  ,help="IP address of RPC server")
     pars.add_argument('--SERVER_PORT' ,type=str ,default="8766"       ,help="TCP port of RPC server")
-    pars.add_argument('--SOURCE'      ,type=str ,default=["source"]     ,nargs="+" ,help="source directory used in make command.")
-    pars.add_argument('--RESULT'      ,type=str ,default=["build"]      ,nargs="+" ,help="result directory output by make command.")
+    pars.add_argument('--SOURCE'         ,type=str ,default=["source"] ,nargs="+" ,help="source directory used in make command.")
+    pars.add_argument('--RESULT'         ,type=str ,default=["build"]  ,nargs="+" ,help="result directory output by make command.")
+    pars.add_argument('--SOURCE_INCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Include only files with these extensions in SOURCE (e.g. .cdl .sp). Empty=all files.")
+    pars.add_argument('--SOURCE_EXCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Exclude files with these extensions from SOURCE (e.g. .gds .gds2).")
     pars.add_argument('--TLS_CONFIG_DIR'    ,default=""  ,help="TLS configuration directory. if empty, Connection not use TLS.")
     
     args = pars.parse_args()
@@ -241,6 +258,9 @@ def main():
     if not source:                                   # 空文字列なら ""
        source = ""
 
+    source_include = args.SOURCE_INCLUDE
+    source_exclude = args.SOURCE_EXCLUDE
+
     # RESULT の処理
     result = " ".join(str(x) for x in args.RESULT)
     result = re.sub(r'\s+', ' ', result).strip()
@@ -248,15 +268,17 @@ def main():
       result = ""
     
     #
-    run(tool       =args.REPO_URL, 
-        target     =args.CMD,
-        server_ip  =args.SERVER_IP, 
-        server_port=args.SERVER_PORT,
-        client_key =client_key,
-        client_crt =client_crt,
-        ca_crt     =ca_crt,
-        source     =source, 
-        result     =result)
+    run(tool           =args.REPO_URL,
+        target         =args.CMD,
+        server_ip      =args.SERVER_IP,
+        server_port    =args.SERVER_PORT,
+        client_key     =client_key,
+        client_crt     =client_crt,
+        ca_crt         =ca_crt,
+        source         =source,
+        result         =result,
+        source_include =source_include,
+        source_exclude =source_exclude)
     
 if __name__ == '__main__':
     main()
