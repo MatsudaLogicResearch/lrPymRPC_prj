@@ -3,6 +3,12 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.2.8] 2026-04-11
+### add --SOURCE_MATCH option: filter SOURCE files by path substring (OR condition, multiple values allowed).
+
+## [0.2.7] 2026-03-xx
+### add --SOURCE_INCLUDE / --SOURCE_EXCLUDE options.
+
 ## [0.2.6] 2026-02-02
 ### archive symbolic-link file.
 

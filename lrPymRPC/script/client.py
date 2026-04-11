@@ -18,7 +18,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.7"
+__version__ = "0.2.8"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -83,8 +83,8 @@ def download(stub, ip_port, unique_id, result_dir, result_gz):
     print(f"[{ip_port}]:{msg}")        
 
         
-def _make_tar_filter(include_exts, exclude_exts):
-    """tarfile フィルター生成。--SOURCE_INCLUDE / --SOURCE_EXCLUDE に対応。"""
+def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
+    """tarfile フィルター生成。--SOURCE_INCLUDE / --SOURCE_EXCLUDE / --SOURCE_MATCH に対応。"""
     def _filter(tarinfo):
         if tarinfo.isdir():
             return tarinfo  # ディレクトリは常に通す（再帰探索のため）
@@ -92,11 +92,13 @@ def _make_tar_filter(include_exts, exclude_exts):
             return None     # --SOURCE_INCLUDE 指定時：一致しないファイルは除外
         if exclude_exts and any(tarinfo.name.endswith(e) for e in exclude_exts):
             return None     # --SOURCE_EXCLUDE 指定時：一致するファイルは除外
+        if match_patterns and not any(p in tarinfo.name for p in match_patterns):
+            return None     # --SOURCE_MATCH 指定時：パスにいずれも含まれないファイルは除外
         return tarinfo
     return _filter
 
 
-def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None):
+def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None):
     # gRPCチャンネルを作成
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
@@ -137,7 +139,7 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
 
     base_dir = (Path("./")).resolve()
     
-    tar_filter = _make_tar_filter(source_include or [], source_exclude or [])
+    tar_filter = _make_tar_filter(source_include or [], source_exclude or [], source_match or [])
 
     with tarfile.open(source_gz, 'w:gz', dereference=True) as tar:
       for f in source_dir.split(" "):
@@ -214,6 +216,7 @@ def main():
     pars.add_argument('--RESULT'         ,type=str ,default=["build"]  ,nargs="+" ,help="result directory output by make command.")
     pars.add_argument('--SOURCE_INCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Include only files with these extensions in SOURCE (e.g. .cdl .sp). Empty=all files.")
     pars.add_argument('--SOURCE_EXCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Exclude files with these extensions from SOURCE (e.g. .gds .gds2).")
+    pars.add_argument('--SOURCE_MATCH'   ,type=str ,default=[]         ,nargs="+" ,help="Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files.")
     pars.add_argument('--TLS_CONFIG_DIR'    ,default=""  ,help="TLS configuration directory. if empty, Connection not use TLS.")
     
     args = pars.parse_args()
@@ -260,6 +263,7 @@ def main():
 
     source_include = args.SOURCE_INCLUDE
     source_exclude = args.SOURCE_EXCLUDE
+    source_match   = args.SOURCE_MATCH
 
     # RESULT の処理
     result = " ".join(str(x) for x in args.RESULT)
@@ -278,7 +282,8 @@ def main():
         source         =source,
         result         =result,
         source_include =source_include,
-        source_exclude =source_exclude)
+        source_exclude =source_exclude,
+        source_match   =source_match)
     
 if __name__ == '__main__':
     main()
