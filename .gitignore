@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Virtual environment
+venv/
+.venv/
+
+# Local debug script (per-developer)
+debug_run.sh
+
+# Build artifacts
+build/
+dist/
+
+# Logs
+*.log

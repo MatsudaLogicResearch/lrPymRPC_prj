@@ -3,6 +3,9 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.2.9] 2026-05-15
+### add --RUN_NAME option to isolate each run under ./<RUN_NAME>/ for parallel execution (empty=backward compatible). Fix tar.extractall(path=None) TypeError on Python 3.10.
+
 ## [0.2.8] 2026-04-11
 ### add --SOURCE_MATCH option: filter SOURCE files by path substring (OR condition, multiple values allowed).
 

@@ -81,6 +81,10 @@ python -m lrPymRPC
 	[--SERVER_PORT SERVER_PORT] \
 	[--SOURCE SOURCE [SOURCE ...]] \
 	[--RESULT RESULT [RESULT ...]] \
+	[--SOURCE_INCLUDE [SOURCE_INCLUDE ...]] \
+	[--SOURCE_EXCLUDE [SOURCE_EXCLUDE ...]] \
+	[--SOURCE_MATCH SOURCE_MATCH [SOURCE_MATCH ...]] \
+	[--RUN_NAME RUN_NAME] \
 	[--TLS_CONFIG_DIR TLS_CONFIG_DIR] \
 ```
 
@@ -94,6 +98,10 @@ python -m lrPymRPC
   --SERVER_PORT SERVER_PORT  TCP port of RPC server \
   --SOURCE SOURCE [SOURCE ...] source directory used in make command. \
   --RESULT RESULT [RESULT ...] result directory output by make command. \
+  --SOURCE_INCLUDE [SOURCE_INCLUDE ...] Include only files with these extensions in SOURCE (e.g. .cdl .sp). Empty=all files. \
+  --SOURCE_EXCLUDE [SOURCE_EXCLUDE ...] Exclude files with these extensions from SOURCE (e.g. .gds .gds2). \
+  --SOURCE_MATCH SOURCE_MATCH [SOURCE_MATCH ...] Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files. \
+  --RUN_NAME RUN_NAME        Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution. \
 	--TLS_CONFIG_DIR TLS_CONFIG_DIR TLS configuration directory\
                         
 ```
@@ -137,5 +145,66 @@ make clean; mkdir work; make
 > ls
 # IHP130  IHP130.v  IHP130_1P5V_27C.lib  IHP130_1P5V_27C.md  LICENSE  Makefile  OSU350  SKY130  cat_run.sh  cmd  script  tcl  work
 ```
+
+## Parallel Execution with `--RUN_NAME`
+
+`--RUN_NAME <name>` isolates each lrPymRPC invocation under `./<name>/` on the client side, so multiple runs can execute in parallel without colliding on `_source.tar.gz`, `_result.tar.gz`, or extracted result directories. Server-side behavior is unchanged: the same archive content is sent and received; only the client-side filesystem layout differs.
+
+### Behavior
+
+| `--RUN_NAME` | Source/Result archive | Extract path |
+|---|---|---|
+| empty (default) | `./_source.tar.gz`, `./_result.tar.gz` | CWD (`./rslt`, `./work`, ...) |
+| `run1` | `./run1/_source.tar.gz`, `./run1/_result.tar.gz` | `./run1/` (`./run1/rslt`, `./run1/work`, ...) |
+
+The directory `./<RUN_NAME>/` is created automatically (`mkdir -p`) just before the source archive is built.
+
+### Validation rules
+
+`--RUN_NAME` accepts a single directory name only. Examples:
+
+| Value | Result |
+|---|---|
+| `""` (default) | OK — backward-compatible mode, no isolation |
+| `A`, `run1`, `job_42` | OK — isolates under `./A/`, `./run1/`, `./job_42/` |
+| `a/b`, `/abs`, `a\b`, `foo/` | rejected with `ValueError` (no slashes/backslashes) |
+| `.`, `..`, `../foo` | rejected with `ValueError` (no dot-only paths) |
+
+### Example (two parallel runs)
+
+```bash
+# Common setup: a placeholder source directory
+mkdir -p rslt
+
+# Terminal A
+python -u -m lrPymRPC \
+    --SERVER_IP 192.168.1.10 \
+    --SOURCE rslt \
+    --RESULT rslt \
+    --RUN_NAME A \
+    --CMD "bash -c 'echo hello-A > rslt/test.txt'"
+# Result: ./A/rslt/test.txt  contents = "hello-A"
+
+# Terminal B (run concurrently with Terminal A)
+python -u -m lrPymRPC \
+    --SERVER_IP 192.168.1.10 \
+    --SOURCE rslt \
+    --RESULT rslt \
+    --RUN_NAME B \
+    --CMD "bash -c 'echo hello-B > rslt/test.txt'"
+# Result: ./B/rslt/test.txt  contents = "hello-B"
+```
+
+Both runs share the client-side `./rslt` source directory (used only as an empty placeholder, sent to the server as part of `_source.tar.gz`), but their results land in independent `./A/` and `./B/` subtrees with no cross-contamination.
+
+### Caller-side checklist (tools wrapping lrPymRPC)
+
+When wrapping `lrPymRPC` in a higher-level script (e.g. `debug_run.sh` of another project) and you want to support `--RUN_NAME`:
+
+1. Pass `--RUN_NAME "$RUN_NAME"` (or omit when empty) to `lrPymRPC`.
+2. Any post-processing that reads `rslt/...` or `work/...` on the client side must be prefixed with `${RUN_NAME:+$RUN_NAME/}` when `RUN_NAME` is set.
+3. Server-side paths inside `--CMD` (e.g. `bash -c '... > rslt/test.txt'`) are NOT prefixed — the server always sees `rslt/` at its tmpdir root.
+4. Log files and any other client-side artifacts of the same run should also be placed under `./<RUN_NAME>/` for clean isolation.
+
 
 ## Known issues (future works)

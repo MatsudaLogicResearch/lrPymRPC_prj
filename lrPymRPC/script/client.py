@@ -18,7 +18,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.8"
+__version__ = "0.2.9"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -83,6 +83,17 @@ def download(stub, ip_port, unique_id, result_dir, result_gz):
     print(f"[{ip_port}]:{msg}")        
 
         
+def _validate_run_name(run_name):
+    """--RUN_NAME の検証。空文字列はOK（後方互換）。指定時は 1 階層のディレクトリ名のみ許可。"""
+    if not run_name:
+        return ""
+    if "/" in run_name or "\\" in run_name:
+        raise ValueError(f"--RUN_NAME must be a single directory name (no slashes): {run_name!r}")
+    if run_name in (".", ".."):
+        raise ValueError(f"--RUN_NAME cannot be '.' or '..': {run_name!r}")
+    return run_name
+
+
 def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
     """tarfile フィルター生成。--SOURCE_INCLUDE / --SOURCE_EXCLUDE / --SOURCE_MATCH に対応。"""
     def _filter(tarinfo):
@@ -98,7 +109,7 @@ def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
     return _filter
 
 
-def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None):
+def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name=""):
     # gRPCチャンネルを作成
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
@@ -131,11 +142,17 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     source_dir = source
     result_dir = result
 
-    source_gz  = '_source.tar.gz'
-    result_gz  = '_result.tar.gz'
-    
+    # --RUN_NAME 指定時は ./<run_name>/ 配下にまとめる（並列実行用）
+    if run_name:
+        Path(run_name).mkdir(parents=True, exist_ok=True)
+        source_gz = f"{run_name}/_source.tar.gz"
+        result_gz = f"{run_name}/_result.tar.gz"
+    else:
+        source_gz = '_source.tar.gz'
+        result_gz = '_result.tar.gz'
+
     msg=f"Compress source={source_dir}"
-    print(f"[{ip_port}]:{msg}")        
+    print(f"[{ip_port}]:{msg}")
 
     base_dir = (Path("./")).resolve()
     
@@ -192,7 +209,7 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
       # 実行結果を展開
       print(f"[{ip_port}]:Check: Extract result.")
       with tarfile.open(result_gz, 'r:gz') as tar:
-        tar.extractall()
+        tar.extractall(path=run_name if run_name else '.')
     else:
       print(f"[{ip_port}]:Check: Download data is not exist.")
 
@@ -217,6 +234,7 @@ def main():
     pars.add_argument('--SOURCE_INCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Include only files with these extensions in SOURCE (e.g. .cdl .sp). Empty=all files.")
     pars.add_argument('--SOURCE_EXCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Exclude files with these extensions from SOURCE (e.g. .gds .gds2).")
     pars.add_argument('--SOURCE_MATCH'   ,type=str ,default=[]         ,nargs="+" ,help="Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files.")
+    pars.add_argument('--RUN_NAME'       ,type=str ,default=""                  ,help="Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution.")
     pars.add_argument('--TLS_CONFIG_DIR'    ,default=""  ,help="TLS configuration directory. if empty, Connection not use TLS.")
     
     args = pars.parse_args()
@@ -270,7 +288,10 @@ def main():
     result = re.sub(r'\s+', ' ', result).strip()
     if not result:
       result = ""
-    
+
+    # RUN_NAME の検証（空文字列はOK、それ以外は 1 階層のディレクトリ名のみ許可）
+    run_name = _validate_run_name(args.RUN_NAME)
+
     #
     run(tool           =args.REPO_URL,
         target         =args.CMD,
@@ -283,7 +304,8 @@ def main():
         result         =result,
         source_include =source_include,
         source_exclude =source_exclude,
-        source_match   =source_match)
+        source_match   =source_match,
+        run_name       =run_name)
     
 if __name__ == '__main__':
     main()
