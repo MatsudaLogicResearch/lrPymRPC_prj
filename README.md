@@ -175,6 +175,37 @@ tar tzf _result.tar.gz | head        # what came back
   previous `_result.tar.gz` stays behind. Delete it yourself when it would confuse you.
 
 
+## Each run starts from an empty server-side directory
+
+Every run gets a **fresh** working directory on the server (`/tmp/lrpymrpc/<PORT>/<UUID>/`), and it
+is removed when the session ends. Nothing carries over between runs.
+
+That has two consequences worth knowing before you debug a build:
+
+**Multi-stage builds must happen in one `--CMD`.** Locally you can run `make html` today and
+`make latexpdf` tomorrow, because `_build/` is still there. Here the second run starts from nothing,
+so a target that consumes the output of an earlier target has to be in the same command:
+
+```
+--CMD "make -C docs html latexpdf dist"     # OK
+--CMD "make -C docs latexpdf"               # fails if the target needs html output from a past run
+```
+
+**A successful build still returns nothing unless `--RESULT` matches.** The only hint is one line:
+
+```
+Check: Download data is not exist.
+```
+
+Check that `--RESULT` names a directory that exists **at the root of the extracted archive**, using
+a top-level name only (`_build`, not `docs/_build`). A build writing into `_build/` while `--RESULT`
+says `build` produces exactly the message above - with the files sitting on the server until the
+session is cleaned up.
+
+`--KEEP_ARCHIVE` helps here: it leaves `_result.tar.gz` behind so you can see what actually came
+back, rather than guessing.
+
+
 ## Server-side limits you may hit
 
 The server enforces limits that the client cannot query in advance. They surface as gRPC errors

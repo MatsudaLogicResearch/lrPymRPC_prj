@@ -3,6 +3,16 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.3.2] 2026-08-27
+### セッションの前提を README に明記（ドキュメントのみ）
+- **run ごとにサーバ側の作業ディレクトリは新規**（`/tmp/lrpymrpc/<PORT>/<UUID>/`）で、
+  セッション終了時に消える。前 run の中間生成物は残らないため、
+  **多段ビルドは 1 つの `--CMD` にまとめる**必要がある
+- **ビルドが成功しても `--RESULT` が合っていなければ何も回収されない**。
+  手がかりは `Check: Download data is not exist.` の 1 行だけ。
+  出力が `_build/` なのに `--RESULT build` を指定する取り違えが典型
+- `--KEEP_ARCHIVE` を使えば、実際に何が返ってきたかを `_result.tar.gz` で確認できる
+
 ## [0.3.1] 2026-08-27
 ### add --KEEP_ARCHIVE option (ISS-00322)
 - `--KEEP_ARCHIVE` を指定すると `_source.tar.gz` / `_result.tar.gz` を**実行後に削除しない**。
