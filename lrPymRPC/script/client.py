@@ -19,7 +19,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.3.0.a02"
+__version__ = "0.3.0"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信

@@ -3,6 +3,12 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.3.0] 2026-08-27
+### --PIP_REQ 対応（0.3.0.a01〜a02 の内容を正式版として確定）
+- `--PIP_REQ`：サーバ側で `pip install -r <requirements>` を実行する（ISS-00319）
+- サーバ側制限（Upload サイズ・セッション TTL）を README に明記
+- **必要なサーバ**：`lrPymRPC_server` 0.4.0 以上
+
 ## [0.3.0.a02] 2026-08-27
 ### document server-side limits (upload size / session TTL)
 - README に「Server-side limits you may hit」を追加
