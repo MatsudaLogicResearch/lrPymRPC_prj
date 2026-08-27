@@ -19,7 +19,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -172,7 +172,7 @@ def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
     return _filter
 
 
-def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name="", pip_req=""):
+def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name="", pip_req="", keep_archive=False):
     # gRPCチャンネルを作成
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
@@ -285,9 +285,15 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     else:
       print(f"[{ip_port}]:Check: Download data is not exist.")
 
-    #-- remove tar.gz files
+    #-- tar.gz の後始末。--KEEP_ARCHIVE 指定時は残す（不具合解析用, ISS-00322）
     for f in [source_gz, result_gz]:
-      if os.path.isfile(f):
+      if not os.path.isfile(f):
+        continue
+      if keep_archive:
+        # 単位は MB 固定。1 KB 未満でも 0.00 MB とは出さず、最低 0.01 MB と表示する
+        size_mb = max(0.01, os.path.getsize(f) / 1024 / 1024)
+        print(f"[{ip_port}]:Check: keep archive file={f} ({size_mb:.2f} MB)")
+      else:
         print(f"[{ip_port}]:Check: remove archive file={f}" )
         os.remove(f)
 
@@ -308,6 +314,7 @@ def main():
     pars.add_argument('--SOURCE_MATCH'   ,type=str ,default=[]         ,nargs="+" ,help="Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files.")
     pars.add_argument('--RUN_NAME'       ,type=str ,default=""                  ,help="Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution.")
     pars.add_argument('--PIP_REQ'        ,type=str ,default=""                  ,help="requirements file for 'pip install -r' on the server. Must be located under --SOURCE. Requires server >= 0.4.0.")
+    pars.add_argument('--KEEP_ARCHIVE'   ,action="store_true"                    ,help="keep _source.tar.gz / _result.tar.gz after the run (default: remove). For debugging what was actually sent and received.")
     pars.add_argument('--TLS_CONFIG_DIR'    ,default=""  ,help="TLS configuration directory. if empty, Connection not use TLS.")
     
     args = pars.parse_args()
@@ -382,7 +389,8 @@ def main():
           source_exclude =source_exclude,
           source_match   =source_match,
           run_name       =run_name,
-          pip_req        =args.PIP_REQ)
+          pip_req        =args.PIP_REQ,
+          keep_archive   =args.KEEP_ARCHIVE)
     except (ValueError, RuntimeError) as e:
       print(f"ERROR: {e}")
       sys.exit(1)

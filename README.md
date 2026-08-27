@@ -86,6 +86,7 @@ python -m lrPymRPC
 	[--SOURCE_MATCH SOURCE_MATCH [SOURCE_MATCH ...]] \
 	[--RUN_NAME RUN_NAME] \
 	[--PIP_REQ PIP_REQ] \
+	[--KEEP_ARCHIVE] \
 	[--TLS_CONFIG_DIR TLS_CONFIG_DIR] \
 ```
 
@@ -104,6 +105,7 @@ python -m lrPymRPC
   --SOURCE_MATCH SOURCE_MATCH [SOURCE_MATCH ...] Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files. \
   --RUN_NAME RUN_NAME        Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution. \
   --PIP_REQ PIP_REQ          requirements file for 'pip install -r' on the server. Must be located under --SOURCE. Requires server >= 0.4.0. \
+  --KEEP_ARCHIVE             keep _source.tar.gz / _result.tar.gz after the run (default: remove). For debugging what was actually sent and received. \
 	--TLS_CONFIG_DIR TLS_CONFIG_DIR TLS configuration directory\
                         
 ```
@@ -147,6 +149,31 @@ make clean; mkdir work; make
 > ls
 # IHP130  IHP130.v  IHP130_1P5V_27C.lib  IHP130_1P5V_27C.md  LICENSE  Makefile  OSU350  SKY130  cat_run.sh  cmd  script  tcl  work
 ```
+
+## Keeping the transfer archives (`--KEEP_ARCHIVE`)
+
+By default the client deletes `_source.tar.gz` and `_result.tar.gz` when the run finishes.
+Pass `--KEEP_ARCHIVE` to keep them, so you can inspect **what was actually sent and received**:
+
+```
+python -u -m lrPymRPC ... --KEEP_ARCHIVE
+...
+[<ip:port>]:Check: keep archive file=_source.tar.gz (12.34 MB)
+[<ip:port>]:Check: keep archive file=_result.tar.gz (0.51 MB)
+```
+
+```
+tar tzf _source.tar.gz | head        # what went to the server
+tar tzf _result.tar.gz | head        # what came back
+```
+
+- Sizes are reported in MB, with **0.01 MB as the smallest value shown**.
+- With `--RUN_NAME`, the files live under `./<RUN_NAME>/`.
+- Useful when you hit the server's upload size limit: the error tells you the limit, and the
+  kept archive tells you what made it that big.
+- **The archives are overwritten on the next run, except when a run produces no result** - then the
+  previous `_result.tar.gz` stays behind. Delete it yourself when it would confuse you.
+
 
 ## Server-side limits you may hit
 
