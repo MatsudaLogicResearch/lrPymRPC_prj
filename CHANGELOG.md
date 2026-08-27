@@ -3,6 +3,13 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.3.0.a02] 2026-08-27
+### document server-side limits (upload size / session TTL)
+- README に「Server-side limits you may hit」を追加
+- クライアントからは事前に問い合わせられないこと、上限値はエラーメッセージに含まれること、
+  上限に当たった場合は `--SOURCE_INCLUDE` / `--SOURCE_EXCLUDE` / `--SOURCE_MATCH` で削ること
+- セッション TTL（サーバ既定 1 時間）と、**実行中の RPC がある間は回収されない**ことを明記
+
 ## [0.3.0.a01] 2026-08-27
 ### add --PIP_REQ option: run "pip install -r <requirements>" on the server (ISS-00319)
 - `--PIP_REQ <path>` を追加。`--REPO_URL` とは独立した引数で、**片方だけ／両方省略でも動作する**（単数指定）

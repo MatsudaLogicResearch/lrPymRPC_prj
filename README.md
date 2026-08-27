@@ -148,6 +148,34 @@ make clean; mkdir work; make
 # IHP130  IHP130.v  IHP130_1P5V_27C.lib  IHP130_1P5V_27C.md  LICENSE  Makefile  OSU350  SKY130  cat_run.sh  cmd  script  tcl  work
 ```
 
+## Server-side limits you may hit
+
+The server enforces limits that the client cannot query in advance. They surface as gRPC errors
+containing the limit value, so the message itself tells you what to fix.
+
+### Upload size
+
+The server applies **one size limit twice** (`--MAX_UPLOAD_MB` on the server side, 2 GB by default):
+
+| What is measured | Error (`RESOURCE_EXHAUSTED`) |
+|---|---|
+| **Compressed size** of the `--SOURCE` archive that is sent | `Upload: size limit(<N> MB) exceeded (<X> MB received)` |
+| **Extracted size** - the total size of everything inside that archive | `Upload: extracted size limit(<N> MB) exceeded (<X> MB extracted)` |
+
+Both must be within the limit. Because `--SOURCE` usually compresses well, the extracted size is
+the one that normally decides. Use `--SOURCE_INCLUDE` / `--SOURCE_EXCLUDE` / `--SOURCE_MATCH` to
+drop files you do not need (e.g. GDS) when you hit the limit.
+
+A rejected upload leaves nothing on the server.
+
+### Idle session lifetime
+
+A session directory on the server is removed once it has been idle for `--SESSION_TTL_SEC`
+(1 hour by default). **A session with a running RPC is never removed**, no matter how long the
+command runs or how long it stays silent - so a multi-hour `--CMD` is safe. The timer starts when
+the last RPC returns, so pick up your `--RESULT` in the same run rather than much later.
+
+
 ## Requirements file with `--PIP_REQ`
 
 `--PIP_REQ` installs a requirements file on the server with `pip install -r` before `--REPO_URL`
