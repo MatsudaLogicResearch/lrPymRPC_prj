@@ -3,6 +3,22 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.3.0.a01] 2026-08-27
+### add --PIP_REQ option: run "pip install -r <requirements>" on the server (ISS-00319)
+- `--PIP_REQ <path>` を追加。`--REPO_URL` とは独立した引数で、**片方だけ／両方省略でも動作する**（単数指定）
+- ローカルパスを `--SOURCE` の basename 展開に合わせて変換し、変換結果をログに出す
+  （`PIP_REQ: ./pip_pkg/requirements.txt -> pip_pkg/requirements.txt`）。
+  **`--SOURCE` 配下に無い／存在しないファイルは、サーバへ接続する前にエラーで停止**する（[[ISS-00197]] と同じ
+  「静かに迷子になる」状態を作らないため）
+- サーバへは既存の `tool` チャネルで送る（**proto は変更しない**）。requirements は **module 名が空の項目**
+  （`=<requirement path>`）として表現し、サーバ側が `pip install -r` を付ける
+- サーバが返す `[lrPymRPC_server vX.Y.Z] Execute start` からバージョンを読み、**`--PIP_REQ` 指定時に
+  サーバが 0.4.0 未満ならエラーで停止**する（`--PIP_REQ` 未使用なら旧サーバでも従来どおり動作）
+- `--PIP_REQ` 関連のエラーはトレースバックではなく `ERROR: <message>` の 1 行で表示し、終了コード 1 で終わる
+- README に `--PIP_REQ` の章を追加（パス変換規則、requirements 内の相対パスの解決基準、必要なサーバ版数）
+
+**必要なサーバ**：`lrPymRPC_server` 0.4.0 以上
+
 ## [0.2.9] 2026-05-15
 ### add --RUN_NAME option to isolate each run under ./<RUN_NAME>/ for parallel execution (empty=backward compatible). Fix tar.extractall(path=None) TypeError on Python 3.10.
 

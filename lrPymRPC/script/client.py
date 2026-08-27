@@ -10,6 +10,7 @@
 
 import argparse
 import grpc
+import sys
 import os
 import tarfile
 import re
@@ -18,7 +19,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.2.9"
+__version__ = "0.3.0.a01"
 
 def upload(stub, ip_port, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
@@ -42,19 +43,52 @@ def chunk_file(file_obj, chunk_size=1*1024*1024):
         break
       yield file_service_pb2.DataChunk(data=chunk)
 
-def execute(stub, ip_port, unique_id, tool, command_opt):
+# サーバが最初に返す "[lrPymRPC_server vX.Y.Z] Execute start" からバージョンを取り出す
+_SERVER_VER_RE = re.compile(r"\[lrPymRPC_server v([0-9][0-9A-Za-z.]*)\]")
+
+# --PIP_REQ（pip install -r）に対応したサーバの最小バージョン
+_PIP_REQ_MIN_SERVER = (0, 4, 0)
+
+
+def _server_version_tuple(msg):
+    """サーバの起動メッセージから (major, minor, patch) を取り出す。取れなければ None。"""
+    m = _SERVER_VER_RE.search(msg or "")
+    if not m:
+        return None
+    nums = []
+    for part in m.group(1).split("."):
+        if not part.isdigit():
+            break
+        nums.append(int(part))
+        if len(nums) == 3:
+            break
+    if len(nums) < 3:
+        return None
+    return tuple(nums)
+
+
+def execute(stub, ip_port, unique_id, tool, command_opt, require_pip_req=False):
 
     # コマンドを実行
     request = file_service_pb2.ExecuteRequest(unique_id=unique_id, tool=tool, command_opt=command_opt)
     response_iterator = stub.Execute(request)
     
     # 実行結果（リアルタイム）を受け取る
+    checked_version = not require_pip_req   # --PIP_REQ 未使用ならバージョン確認は不要
     for response in response_iterator:
         msg=response.message
         print(f"[{ip_port}]:{msg}")        
-        #print(f"Success: {response.success}, Message: {response.message}")
-        
-    #print("Done: Execute")
+
+        # --PIP_REQ 指定時は、古いサーバ（requirements を通常パッケージとして扱う）を検出して停止する
+        if not checked_version:
+            ver = _server_version_tuple(msg)
+            if ver is not None:
+                checked_version = True
+                if ver < _PIP_REQ_MIN_SERVER:
+                    vs = ".".join(str(x) for x in ver)
+                    raise RuntimeError(
+                        f"--PIP_REQ requires lrPymRPC_server >= 0.4.0, but the server is {vs}. "
+                        f"Upgrade the server, or drop --PIP_REQ.")
 
 
 def check(stub, ip_port, unique_id, result_dir):
@@ -94,6 +128,35 @@ def _validate_run_name(run_name):
     return run_name
 
 
+def _convert_pip_req(pip_req, source):
+    """
+    --PIP_REQ のローカルパスを、サーバ側（作業ディレクトリ起点）の相対パスへ変換する（ISS-00319）。
+
+    --SOURCE の各要素は tar へ basename で格納される（`tar.add(f, arcname=os.path.basename(f))`）ため、
+    ローカルの `./work/pip_pkg/req.txt`（--SOURCE work/pip_pkg）は サーバ側で `pip_pkg/req.txt` になる。
+    --SOURCE 配下に無いパスを指定した場合は、転送されないまま実行されるのを防ぐため ValueError を raise する。
+    """
+    if not pip_req:
+        return ""
+    base = Path("./").resolve()
+    req = (base / pip_req).resolve()
+    if not req.is_file():
+        raise ValueError(f"--PIP_REQ file not found: {pip_req}")
+
+    for f in source.split(" "):
+        if not f:
+            continue
+        src = (base / f).resolve()
+        if req == src:
+            return os.path.basename(f)
+        if req.is_relative_to(src):
+            return f"{os.path.basename(f)}/{req.relative_to(src).as_posix()}"
+
+    raise ValueError(
+        f"--PIP_REQ must be located under --SOURCE (so that it is transferred): "
+        f"pip_req={pip_req!r}, source={source!r}")
+
+
 def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
     """tarfile フィルター生成。--SOURCE_INCLUDE / --SOURCE_EXCLUDE / --SOURCE_MATCH に対応。"""
     def _filter(tarinfo):
@@ -109,7 +172,7 @@ def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
     return _filter
 
 
-def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name=""):
+def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name="", pip_req=""):
     # gRPCチャンネルを作成
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
@@ -136,6 +199,15 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
 
     #--
     stub = file_service_pb2_grpc.FileServiceStub(channel)
+
+    # ======== tool チャネルの組み立て ========
+    # --PIP_REQ は module 名が空の項目（"=<requirement path>"）としてサーバへ渡す（ISS-00319）
+    # --REPO_URL / --PIP_REQ はどちらか片方だけでも、両方省略でも動作する
+    if pip_req:
+        pip_req_remote = _convert_pip_req(pip_req, source)
+        msg=f"PIP_REQ: {pip_req} -> {pip_req_remote}"
+        print(f"[{ip_port}]:{msg}")
+        tool = ",".join(x for x in [f"={pip_req_remote}", tool] if x)
 
     # ======== SOURCEファイル準備 ========
     # ディレクトリをtar.gzに圧縮
@@ -194,7 +266,7 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     # コマンドを送信し、出力をリアルタイムで受け取る
     print(f"[{ip_port}]:Upload: pip install   ={tool}")
     print(f"[{ip_port}]:Upload: Execute target={target}")
-    execute(stub, ip_port, unique_id, tool, target)    
+    execute(stub, ip_port, unique_id, tool, target, require_pip_req=bool(pip_req))    
 
     # ======== RESULT受信処理 ========
     # 実行結果の有無をチェック
@@ -235,6 +307,7 @@ def main():
     pars.add_argument('--SOURCE_EXCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Exclude files with these extensions from SOURCE (e.g. .gds .gds2).")
     pars.add_argument('--SOURCE_MATCH'   ,type=str ,default=[]         ,nargs="+" ,help="Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files.")
     pars.add_argument('--RUN_NAME'       ,type=str ,default=""                  ,help="Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution.")
+    pars.add_argument('--PIP_REQ'        ,type=str ,default=""                  ,help="requirements file for 'pip install -r' on the server. Must be located under --SOURCE. Requires server >= 0.4.0.")
     pars.add_argument('--TLS_CONFIG_DIR'    ,default=""  ,help="TLS configuration directory. if empty, Connection not use TLS.")
     
     args = pars.parse_args()
@@ -293,19 +366,26 @@ def main():
     run_name = _validate_run_name(args.RUN_NAME)
 
     #
-    run(tool           =args.REPO_URL,
-        target         =args.CMD,
-        server_ip      =args.SERVER_IP,
-        server_port    =args.SERVER_PORT,
-        client_key     =client_key,
-        client_crt     =client_crt,
-        ca_crt         =ca_crt,
-        source         =source,
-        result         =result,
-        source_include =source_include,
-        source_exclude =source_exclude,
-        source_match   =source_match,
-        run_name       =run_name)
+    # --PIP_REQ の指定ミス（SOURCE 外・不在）とサーバ版数不足は、利用者が読める 1 行の
+    # エラーで止める（トレースバックを出さない。TLS ファイル不在時の表示スタイルに合わせる）
+    try:
+      run(tool           =args.REPO_URL,
+          target         =args.CMD,
+          server_ip      =args.SERVER_IP,
+          server_port    =args.SERVER_PORT,
+          client_key     =client_key,
+          client_crt     =client_crt,
+          ca_crt         =ca_crt,
+          source         =source,
+          result         =result,
+          source_include =source_include,
+          source_exclude =source_exclude,
+          source_match   =source_match,
+          run_name       =run_name,
+          pip_req        =args.PIP_REQ)
+    except (ValueError, RuntimeError) as e:
+      print(f"ERROR: {e}")
+      sys.exit(1)
     
 if __name__ == '__main__':
     main()

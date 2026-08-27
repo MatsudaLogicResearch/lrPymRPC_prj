@@ -85,6 +85,7 @@ python -m lrPymRPC
 	[--SOURCE_EXCLUDE [SOURCE_EXCLUDE ...]] \
 	[--SOURCE_MATCH SOURCE_MATCH [SOURCE_MATCH ...]] \
 	[--RUN_NAME RUN_NAME] \
+	[--PIP_REQ PIP_REQ] \
 	[--TLS_CONFIG_DIR TLS_CONFIG_DIR] \
 ```
 
@@ -102,6 +103,7 @@ python -m lrPymRPC
   --SOURCE_EXCLUDE [SOURCE_EXCLUDE ...] Exclude files with these extensions from SOURCE (e.g. .gds .gds2). \
   --SOURCE_MATCH SOURCE_MATCH [SOURCE_MATCH ...] Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files. \
   --RUN_NAME RUN_NAME        Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution. \
+  --PIP_REQ PIP_REQ          requirements file for 'pip install -r' on the server. Must be located under --SOURCE. Requires server >= 0.4.0. \
 	--TLS_CONFIG_DIR TLS_CONFIG_DIR TLS configuration directory\
                         
 ```
@@ -145,6 +147,75 @@ make clean; mkdir work; make
 > ls
 # IHP130  IHP130.v  IHP130_1P5V_27C.lib  IHP130_1P5V_27C.md  LICENSE  Makefile  OSU350  SKY130  cat_run.sh  cmd  script  tcl  work
 ```
+
+## Requirements file with `--PIP_REQ`
+
+`--PIP_REQ` installs a requirements file on the server with `pip install -r` before `--REPO_URL`
+packages are installed.
+
+```
+python -u -m lrPymRPC \
+  --SERVER_IP 192.168.0.10 \
+  --SOURCE pip_pkg src \
+  --RESULT rslt \
+  --PIP_REQ ./pip_pkg/requirements.txt \
+  --CMD "python3 -m mytool"
+```
+
+- `--REPO_URL` and `--PIP_REQ` are independent. **Either one alone, or neither, also works.**
+- `--PIP_REQ` takes a single file. Merge multiple requirements into one file if needed.
+- Install order is **`--PIP_REQ` first, then `--REPO_URL`**.
+- pip output is streamed back in real time.
+- No import check is performed for `--PIP_REQ` (module names cannot be derived from a requirements file).
+  If pip fails, the run is aborted with `ERR: pip install -r failed ...` and `--CMD` is NOT executed.
+
+### The file must be inside `--SOURCE`
+
+Each `--SOURCE` entry is stored in the archive by its **basename**, so the client rewrites the
+`--PIP_REQ` path accordingly and prints the result:
+
+```
+PIP_REQ: ./pip_pkg/requirements.txt -> pip_pkg/requirements.txt
+```
+
+| `--SOURCE` | `--PIP_REQ` | sent to server |
+|---|---|---|
+| `pip_pkg src` | `./pip_pkg/requirements.txt` | `pip_pkg/requirements.txt` |
+| `work/pip_pkg` | `./work/pip_pkg/req.txt` | `pip_pkg/req.txt` |
+
+If the file is not under `--SOURCE` (or does not exist), the client stops **before connecting**:
+
+```
+ERROR: --PIP_REQ must be located under --SOURCE (so that it is transferred): ...
+```
+
+### Paths inside the requirements file
+
+pip resolves relative paths in a requirements file **against the current working directory**,
+not against the location of the requirements file. On the server the working directory is the
+root of the extracted archive, so write paths from there:
+
+```
+# OK (relative to the extracted archive root = basename of each --SOURCE entry)
+-e ./pip_pkg/lrPya_prj
+./pip_pkg/mypkg-0.1.0-py3-none-any.whl
+jsoncomment
+
+# NG (relative to the requirements file itself)
+-e ./lrPya_prj
+```
+
+### Server version
+
+`--PIP_REQ` requires **lrPymRPC_server 0.4.0 or later**. When an older server is detected the run
+stops with:
+
+```
+ERROR: --PIP_REQ requires lrPymRPC_server >= 0.4.0, but the server is 0.3.9. Upgrade the server, or drop --PIP_REQ.
+```
+
+Runs without `--PIP_REQ` keep working against older servers.
+
 
 ## Parallel Execution with `--RUN_NAME`
 
