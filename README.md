@@ -277,13 +277,22 @@ python -u -m lrPymRPC --SERVER_IP 192.168.168.103 \
     --SOURCE sample --RESULT rslt --CMD "ngspice -b in.sp"
 ```
 
-`req_tool.txt` lists the tools you need, in the same notation as pip requirements:
+### `--REQ_TOOL` format
+
+Requirements-style text, **optional**. The whole file is sent inside `RequestResource` - it does
+**not** travel in the source archive, because the request goes out before `Upload`. So, unlike
+`--REQ_PIP`, it does **not** have to sit under `--SOURCE`; any readable path will do.
+
+Example (see also `sample/req_tool.txt.example`):
 
 ```
 # req_tool.txt
 python3>=3.12
 ngspice>=41
+klayout>=0.28
 ```
+
+Same notation as pip requirements: `name>=version`, `#` comments, blank lines ignored.
 
 Names must match the command names in the server's `ALLOWED_BIN_FILE`. Python is usually
 listed there as `python3`, so write `python3>=3.12` — plain `python` would be reported as
@@ -303,21 +312,42 @@ machine, and streams progress back while you wait:
 [192.168.0.101:8765]:Resource: session_id=192.168.0.151/3f2a9c1e-...
 ```
 
-`--REQ_VM` describes the machine you need. The queue goes in here too, so there is no separate
-option for it. A direct server ignores the whole thing.
+### `--REQ_VM` format
+
+TOML, **optional**. Describes the machine you need. The queue goes in here too, so there is no
+separate option for it. Like `--REQ_TOOL` it is sent inside `RequestResource` and therefore does
+**not** need to be under `--SOURCE`.
+
+Example (see also `sample/req_vm.toml.example`):
 
 ```toml
 # req_vm.toml
 queue     = "high"   # preferred queue
 cpu_count = 4        # at least 4 vCPU
 mem_mb    = 8192     # at least 8 GB
-disk_mb   = 51200
-max_par   = 4        # jobs to run on one VM
-count     = 10       # VMs to reserve at once
+disk_mb   = 51200    # at least 50 GB
+max_par   = 4        # jobs to run on one VM (ngspice saturates around 4)
+count     = 10       # VMs to reserve at once (default 1)
 ```
 
-Only the keys you write become requirements; the rest is left to the broker. The client reads the
-file and sends it verbatim — it does not parse it, so no TOML library is needed on the client side.
+**Only the keys you write become requirements**; the rest is left to the broker. There is no fixed
+schema - the client reads the file and sends it verbatim, it does **not** parse it, so no TOML
+library is needed on the client side and new keys can be added without touching the client.
+
+**A direct server ignores the whole thing** and replies with a single `READY`. Writing a
+`req_vm.toml` therefore changes nothing until a broker sits in between; it is not an error.
+
+### If a `--REQ_*` file is missing
+
+All three are optional, but **naming a file that does not exist is an error**, and the client
+stops **before it connects**:
+
+```
+ERROR: --REQ_TOOL file not found: ./req_tool.txt
+```
+
+`--REQ_PIP` has one extra rule on top of that - it must also be under `--SOURCE`, because it
+travels in the source archive. See "Requirements file with `--REQ_PIP`" below.
 
 ### Paths are preserved, and stay under the current directory
 
@@ -364,7 +394,9 @@ python -u -m lrPymRPC \
 - No import check is performed (module names cannot be derived from a requirements file).
   If pip fails, the run is aborted with `ERR: pip install -r failed ...` and `--CMD` is NOT executed.
 - Put git URLs and local packages here too — this file replaces the `--REPO_URL` option,
-  which was removed in 0.5.0:
+  which was removed in 0.5.0.
+
+Example (see also `sample/req_pip.txt.example`):
 
 ```
 # req_pip.txt
@@ -373,6 +405,10 @@ pydantic>=2
 charao @ git+https://github.com/MatsudaLogicResearch/charao_prj.git@2.0.0
 -e ./pip_pkg/lrPya_prj
 ```
+
+All three styles are in daily use and are verified against a live server:
+a plain package name, a git URL pinned to a tag, and a directory you cloned yourself
+(the directory must then be listed in `--SOURCE` as well, so that it is transferred).
 
 ### The file must be inside `--SOURCE`
 
