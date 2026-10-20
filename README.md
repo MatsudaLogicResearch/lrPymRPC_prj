@@ -141,13 +141,6 @@ python -m lrPymRPC
 git clone git@github.com:snishizawa/libretto.git
 ```
 
-- Put the Python dependencies in `req_pip.txt` (it must sit under `--SOURCE` so that it is transferred):
-
-```
-# req_pip.txt
-numpy
-```
-
 - Modify the Makefile to use lrPymRPC:
 
 ``` makefile
@@ -156,11 +149,26 @@ numpy
 
 	python3 -m lrPymRPC \
 	--SERVER_IP 127.0.0.1 \
-	--REQ_PIP ./req_pip.txt \
 	--TLS_CONFIG_DIR "~/.tls/tls_lrpymrpc" \
-	--CMD "python $(LIBRETTO) -b $(CMD_FILE)" \
 	--SOURCE "IHP130 cmd script work" \
 	--RESULT "$(LIB) $(MD) $(PROCESS_NAME).v" \
+	--CMD "python $(LIBRETTO) -b $(CMD_FILE)" \
+```
+
+`--REQ_PIP`, `--REQ_TOOL` and `--REQ_VM` are all optional - omit them and nothing extra is sent.
+
+If the tool needs Python packages installed on the server, write them in `req_pip.txt` and
+**list that file in `--SOURCE` too**. It travels inside the source archive, so leaving it out of
+`--SOURCE` stops the run before it connects:
+
+```
+# req_pip.txt
+numpy
+```
+
+``` makefile
+	--REQ_PIP ./req_pip.txt \
+	--SOURCE "IHP130 cmd script work req_pip.txt" \
 ```
 
 #### run
