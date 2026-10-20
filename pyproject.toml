@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lrPymRPC"
-version = "0.3.2"
+version = "0.5.0.a01"
 description = "gRPC client of Python module for LogicResearch-Tools."
 authors = [{ name = "LogicResearch K.K.(MATSUDA Masahiro)", email = "matsuda@logic-research.co.jp" }]
 readme = "README.md"
@@ -20,4 +20,4 @@ where = ["."]
 include = ["lrPymRPC","lrPymRPC.script","lrPymRPC.proto"]
 
 [project.scripts]
-lrRPC-client = "lrPymRPC.client:main"
+lrRPC-client = "lrPymRPC.script.client:main"

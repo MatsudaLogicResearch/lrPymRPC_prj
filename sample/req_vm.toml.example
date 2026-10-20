@@ -1,0 +1,12 @@
+# --VM_REQ で指定する VM 要求の例（TOML）。
+#
+# 中身が RequestResource で送られる。**broker が VM を調達するための要求**で、
+# 直結サーバは無視する。client は中身を読んで送るだけでパースしない。
+# 書いた項目だけが要求になる（省略した項目は broker 任せ）。
+
+queue     = "high"   # 希望するキュー
+cpu_count = 4        # 最低 4 vCPU
+mem_mb    = 8192     # 最低 8 GB
+disk_mb   = 51200    # 最低 50 GB
+max_par   = 4        # 1 VM に流す並列数（ngspice は 4 並列で頭打ち）
+count     = 10       # 同時に確保したい VM 台数（省略時 1）

@@ -3,8 +3,7 @@
 import grpc
 import warnings
 
-#import file_service_pb2 as file__service__pb2
-import lrPymRPC.proto.file_service_pb2 as file__service__pb2
+from lrPymRPC.proto import file_service_pb2 as lrPymRPC_dot_proto_dot_file__service__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -19,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in file_service_pb2_grpc.py depends on'
+        + ' but the generated code in lrPymRPC/proto/file_service_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -35,30 +34,44 @@ class FileServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.RequestResource = channel.unary_stream(
+                '/FileService/RequestResource',
+                request_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.ResourceRequest.SerializeToString,
+                response_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.ResourceResponse.FromString,
+                _registered_method=True)
         self.Upload = channel.stream_unary(
                 '/FileService/Upload',
-                request_serializer=file__service__pb2.DataChunk.SerializeToString,
-                response_deserializer=file__service__pb2.UploadResponse.FromString,
+                request_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.UploadRequest.SerializeToString,
+                response_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.UploadResponse.FromString,
                 _registered_method=True)
         self.Execute = channel.unary_stream(
                 '/FileService/Execute',
-                request_serializer=file__service__pb2.ExecuteRequest.SerializeToString,
-                response_deserializer=file__service__pb2.ExecuteResponse.FromString,
+                request_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.ExecuteRequest.SerializeToString,
+                response_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.ExecuteResponse.FromString,
                 _registered_method=True)
         self.Check = channel.unary_unary(
                 '/FileService/Check',
-                request_serializer=file__service__pb2.CheckRequest.SerializeToString,
-                response_deserializer=file__service__pb2.CheckResponse.FromString,
+                request_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.CheckRequest.SerializeToString,
+                response_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.CheckResponse.FromString,
                 _registered_method=True)
         self.Download = channel.unary_stream(
                 '/FileService/Download',
-                request_serializer=file__service__pb2.DownloadRequest.SerializeToString,
-                response_deserializer=file__service__pb2.DataChunk.FromString,
+                request_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.DownloadRequest.SerializeToString,
+                response_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.DataChunk.FromString,
                 _registered_method=True)
 
 
 class FileServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
+
+    def RequestResource(self, request, context):
+        """リソース要求（0.5.0 新規）
+        client が要求を出し、server は「実際の対応」を返す。
+        broker 介在時は PROGRESS を何本でも流せる（キュー状況・VM 起動の進捗など）。
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def Upload(self, request_iterator, context):
         """データアップロード
@@ -91,25 +104,30 @@ class FileServiceServicer(object):
 
 def add_FileServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'RequestResource': grpc.unary_stream_rpc_method_handler(
+                    servicer.RequestResource,
+                    request_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.ResourceRequest.FromString,
+                    response_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.ResourceResponse.SerializeToString,
+            ),
             'Upload': grpc.stream_unary_rpc_method_handler(
                     servicer.Upload,
-                    request_deserializer=file__service__pb2.DataChunk.FromString,
-                    response_serializer=file__service__pb2.UploadResponse.SerializeToString,
+                    request_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.UploadRequest.FromString,
+                    response_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.UploadResponse.SerializeToString,
             ),
             'Execute': grpc.unary_stream_rpc_method_handler(
                     servicer.Execute,
-                    request_deserializer=file__service__pb2.ExecuteRequest.FromString,
-                    response_serializer=file__service__pb2.ExecuteResponse.SerializeToString,
+                    request_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.ExecuteRequest.FromString,
+                    response_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.ExecuteResponse.SerializeToString,
             ),
             'Check': grpc.unary_unary_rpc_method_handler(
                     servicer.Check,
-                    request_deserializer=file__service__pb2.CheckRequest.FromString,
-                    response_serializer=file__service__pb2.CheckResponse.SerializeToString,
+                    request_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.CheckRequest.FromString,
+                    response_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.CheckResponse.SerializeToString,
             ),
             'Download': grpc.unary_stream_rpc_method_handler(
                     servicer.Download,
-                    request_deserializer=file__service__pb2.DownloadRequest.FromString,
-                    response_serializer=file__service__pb2.DataChunk.SerializeToString,
+                    request_deserializer=lrPymRPC_dot_proto_dot_file__service__pb2.DownloadRequest.FromString,
+                    response_serializer=lrPymRPC_dot_proto_dot_file__service__pb2.DataChunk.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -121,6 +139,33 @@ def add_FileServiceServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class FileService(object):
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def RequestResource(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/FileService/RequestResource',
+            lrPymRPC_dot_proto_dot_file__service__pb2.ResourceRequest.SerializeToString,
+            lrPymRPC_dot_proto_dot_file__service__pb2.ResourceResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def Upload(request_iterator,
@@ -137,8 +182,8 @@ class FileService(object):
             request_iterator,
             target,
             '/FileService/Upload',
-            file__service__pb2.DataChunk.SerializeToString,
-            file__service__pb2.UploadResponse.FromString,
+            lrPymRPC_dot_proto_dot_file__service__pb2.UploadRequest.SerializeToString,
+            lrPymRPC_dot_proto_dot_file__service__pb2.UploadResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -164,8 +209,8 @@ class FileService(object):
             request,
             target,
             '/FileService/Execute',
-            file__service__pb2.ExecuteRequest.SerializeToString,
-            file__service__pb2.ExecuteResponse.FromString,
+            lrPymRPC_dot_proto_dot_file__service__pb2.ExecuteRequest.SerializeToString,
+            lrPymRPC_dot_proto_dot_file__service__pb2.ExecuteResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -191,8 +236,8 @@ class FileService(object):
             request,
             target,
             '/FileService/Check',
-            file__service__pb2.CheckRequest.SerializeToString,
-            file__service__pb2.CheckResponse.FromString,
+            lrPymRPC_dot_proto_dot_file__service__pb2.CheckRequest.SerializeToString,
+            lrPymRPC_dot_proto_dot_file__service__pb2.CheckResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -218,8 +263,8 @@ class FileService(object):
             request,
             target,
             '/FileService/Download',
-            file__service__pb2.DownloadRequest.SerializeToString,
-            file__service__pb2.DataChunk.FromString,
+            lrPymRPC_dot_proto_dot_file__service__pb2.DownloadRequest.SerializeToString,
+            lrPymRPC_dot_proto_dot_file__service__pb2.DataChunk.FromString,
             options,
             channel_credentials,
             insecure,

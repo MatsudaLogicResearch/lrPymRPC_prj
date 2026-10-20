@@ -1,14 +1,19 @@
 //===================================================================
 // This file is part of lrPymRPC.
 // Copyright (C) 2025 LogicResearch K.K (Author: MATSUDA Masahiro)
-// 
+//
 // This script file is licensed under the MIT License.
 //===================================================================
 syntax = "proto3";
 
 service FileService {
+    // リソース要求（0.5.0 新規）
+    // client が要求を出し、server は「実際の対応」を返す。
+    // broker 介在時は PROGRESS を何本でも流せる（キュー状況・VM 起動の進捗など）。
+    rpc RequestResource (ResourceRequest) returns (stream ResourceResponse);
+
     // データアップロード
-    rpc Upload (stream DataChunk) returns (UploadResponse);
+    rpc Upload (stream UploadRequest) returns (UploadResponse);
 
     // コマンド実行
     rpc Execute (ExecuteRequest) returns (stream ExecuteResponse);
@@ -25,49 +30,94 @@ message DataChunk {
 }
 
 //-----------------------------------------------------------
-// アップロード
-//-- レスポンス
-message UploadResponse {
-    string unique_id = 1;  // ID
+// リソース要求
+//-- リクエスト
+message ResourceRequest {
+    string req_tool = 1;  // req_tool.txt の中身（ツール要求。--TOOL_REQ 未指定なら空）
+    string vm_info  = 2;  // req_vm.toml の中身（VM 要求。キュー種別も含む。--VM_REQ 未指定なら空）
+                          // どちらも server は無視する。broker が VM 選定に使う
 }
 
+//-- レスポンス
+message ResourceResponse {
+    enum Stage {
+        PROGRESS = 0;       // 準備中（broker のみが送る。何本でも流せる）
+        READY    = 1;       // 準備完了（最後に 1 本）
+    }
+    Stage      stage          = 1;
+    string     message        = 2;  // 進捗メッセージ（人間向け）
+    string     session_id     = 3;  // READY 時のみ。この段階では <server_ip>
+    ServerSpec spec           = 4;  // READY 時のみ＝実際のサーバー対応
+
+    // 以下は broker だけが埋める。server は 0 / 空のまま
+    string     queue_type     = 5;  // 実際に入ったキュー
+    int32      queue_position = 6;  // キュー内の順番（0 = 該当なし）
+    int32      queue_total    = 7;  // キューの総数
+    int32      eta_sec        = 8;  // 見込み待ち時間（秒）
+}
+
+//-- サーバの実際の対応（各フィールドは値が無くてもよい）
+message ServerSpec {
+    string   server_version   = 1;
+    string   python_version   = 2;
+    repeated ToolSpec tool    = 3;  // ALLOWED_BIN_FILE 由来
+    int32    cpu_count        = 4;  // SERVER_INFO_FILE 由来
+    int64    mem_total_mb     = 5;  // SERVER_INFO_FILE 由来
+    int64    mem_available_mb = 6;  // SERVER_INFO_FILE 由来
+    int64    disk_free_mb     = 7;  // SERVER_INFO_FILE 由来
+    int32    max_upload_mb    = 8;  // --MAX_UPLOAD_MB
+    int32    session_ttl_sec  = 9;  // --SESSION_TTL_SEC
+}
+
+message ToolSpec {
+    string name    = 1;  // ngspice
+    string version = 2;  // 44.2（不明なら空）
+}
+
+//-----------------------------------------------------------
+// アップロード
+//-- リクエスト
+message UploadRequest {
+    string session_id = 1;  // 最初のチャンクのみ設定（<server_ip>）
+    bytes  data       = 2;  // 圧縮データのチャンク
+}
+
+//-- レスポンス
+message UploadResponse {
+    string session_id = 1;  // <server_ip>/<work_id>
+}
 
 //-----------------------------------------------------------
 // コマンド
 //-- リクエスト
 message ExecuteRequest {
-    string unique_id = 1;  // ID
-    string tool      = 2;    // 実行するツール
-    string command_opt = 3;    // 実行するコマンドオプション
+    string session_id  = 1;  // <server_ip>/<work_id>
+    string command_opt = 2;  // 実行するコマンドオプション
+    string pip_req     = 3;  // requirements の相対パス（作業ディレクトリ起点、未指定なら空）
 }
-
 
 //-- レスポンス
 message ExecuteResponse {
     string message = 1;  // コマンド実行結果のメッセージ
 }
 
-
 //-----------------------------------------------------------
 // チェック
 //-- リクエスト
 message CheckRequest {
-    string unique_id = 1;  // ID
-    string result_dir = 2;    // result directory
+    string session_id = 1;  // <server_ip>/<work_id>
+    string result_dir = 2;  // result directory
 }
-
 
 //-- レスポンス
 message CheckResponse {
     bool has_stream  = 1;
 }
 
-
 //-----------------------------------------------------------
 // ダウンロード
 //-- リクエスト
 message DownloadRequest {
-    string unique_id = 1;  // ID
-    string result_dir = 2;    // result directory
+    string session_id = 1;  // <server_ip>/<work_id>
+    string result_dir = 2;  // result directory
 }
-

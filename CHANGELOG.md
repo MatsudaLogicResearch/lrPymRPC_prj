@@ -3,6 +3,70 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.5.0.a01] 2026-10-19
+### 変更：プロトコル刷新（RequestResource 追加、REPO_URL 廃止）（ISS-00337）
+
+**BREAKING CHANGE: lrPymRPC_server 0.5.0 以上が必要。旧サーバとは通信できない。**
+
+client が「要求」を出し、broker が要求に合うリソースを調達し、server は「実際の対応」を返す、
+という流れに変えた。**broker が無くても（直結でも）動作する。** client/server 間と
+client/broker/server 間は同じ proto を使う。
+
+- **`RequestResource` を追加**（server streaming）。Upload の前に要求を出し、サーバの
+  実際の対応（版数・python・ツール一覧・CPU/メモリ/ディスク・上限値）を受け取る。
+  broker 介在時は `PROGRESS` でキュー状況や VM 起動の進捗が流れる
+- **`--TOOL_REQ` を追加**（推奨ファイル名 `req_tool.txt`）。要求するツールとバージョンを
+  pip requirements と同じ記法で書き、**中身を** `RequestResource` で送る。
+  要求したツールがサーバの一覧に無ければ警告する（停止はしない）
+- **`--QUEUE_TYPE` を追加**。broker に希望するキューを伝える（直結サーバは無視する）
+- **`--REPO_URL` を削除**。pip パッケージは `--PIP_REQ` の requirements に一本化した
+  （git URL もローカルパッケージもそこに書ける）。これに伴い install 後の import チェックも廃止
+- **`--PIP_REQ` は据え置き**。推奨ファイル名を `requirements.txt` → **`req_pip.txt`** に変更。
+  伝送は `ExecuteRequest.pip_req`（パス 1 本）になった
+- **`session_id` は `<server_ip>/<work_id>`** の 1 つの文字列。`RequestResource` の時点では
+  `<server_ip>` のみで、Upload 後に `/<work_id>` が付く
+- サーバ版数の判定を `ServerSpec.server_version` に移した（起動バナーの正規表現読みを廃止）
+
+### 変更：--SOURCE / --RESULT が階層を保持する（ISS-00197）
+
+```
+--SOURCE src1/src2/src3.txt  --RESULT rslt1/rslt2/rslt3.txt
+  -> サーバ上で src1/src2/src3.txt に展開
+  -> ローカルへ ./rslt1/rslt2/rslt3.txt として回収
+```
+
+従来は basename で潰れていたため、`--RESULT tmp/x` がエラーも出さずに `./x` へ落ちていた。
+**トップレベル名のみの指定では tar の中身が変わらない**ので、既存の呼び出しは影響を受けない。
+`--SOURCE` の「階層トップから渡す」運用ルールは不要になった。
+
+### 修正：--SOURCE がカレントディレクトリの外を拾えた（ISS-00338）
+
+`Path.is_relative_to()` は `..` を解決しないため、`--SOURCE ../secret` が素通りして
+**カレント外のファイルが送信されていた**。`os.path.normpath` による検証を追加し、
+絶対パス・`..`・`.` を**接続前に**拒否するようにした。
+
+**シンボリックリンクは従来どおり通す。** リンク名が作業ディレクトリ配下なら、リンク先が外でもよい
+（PDK ツリーを別の場所にマウントして転送する運用のため）。この判定に `Path.resolve()` は使わない。
+
+### 修正：結果展開に filter が無かった（ISS-00339）
+
+`tar.extractall()` に `filter='data'` を指定するようにした。サーバから `..` を含む tar が
+返ってきても作業ディレクトリの外に書かれない。Python 3.9/3.10 向けにフォールバックを入れてある。
+
+### 修正：console script が実在しないモジュールを指していた（ISS-00323）
+
+`lrRPC-client` が `lrPymRPC.client:main` を指しており、pip install しても
+`ModuleNotFoundError` になっていた。`lrPymRPC.script.client:main` へ修正した。
+あわせて、console script は `python -u` を付けられないため、`main()` の冒頭で stdout を
+行バッファリングに設定し、サーバ出力がリアルタイムに流れるようにした。
+
+### 修正：proto 再生成スクリプトが壊れた import を生成していた（ISS-00340）
+
+`compile_proto.sh` が `proto/` 内で実行する形だったため、生成される import が
+`import file_service_pb2`（裸の import）になり、**生成後に手で書き換える必要があった**
+（その手順はどこにも記録されていなかった）。リポジトリルートから proto のパスごと渡す形に変更し、
+`from lrPymRPC.proto import file_service_pb2 as ...` が生成されるようにした。
+
 ## [0.3.2] 2026-08-27
 ### セッションの前提を README に明記（ドキュメントのみ）
 - **run ごとにサーバ側の作業ディレクトリは新規**（`/tmp/lrpymrpc/<PORT>/<UUID>/`）で、

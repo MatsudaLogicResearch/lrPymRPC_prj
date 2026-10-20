@@ -15,10 +15,11 @@ TLS handshake:
     ca.crt    --+ 
  
 DATAFLOW: 
-   SOURCE     ==[stream:DataChunk]=====>  /tmp/<UUID>/SOURCE 
-   REPO_URL   ==[request:tool]=========>  pip install <REPO_URL> 
+   req_tool   ==[RequestResource]======>  returns server spec & session_id 
+   SOURCE     ==[stream:UploadRequest]=>  /tmp/<PORT>/<work_id>/SOURCE  (paths preserved) 
+   pip_req    ==[request:pip_req]======>  pip install -r <pip_req> 
    CMD        ==[request:command_opt]==>  execute <CMD> 
-   RESULT     <=[stream:DataChunk]=====   /tmp/<UUID>/RESULT 
+   RESULT     <=[stream:DataChunk]=====   /tmp/<PORT>/<work_id>/RESULT  (paths preserved) 
 </pre>
 
 
@@ -26,6 +27,18 @@ DATAFLOW:
 ```bash
 pip install git+https://github.com/MatsudaLogicResearch/lrPymRPC_prj.git
 ```
+
+Two equivalent entry points are available after installation:
+
+```bash
+python -u -m lrPymRPC --help   # module form (recommended)
+lrRPC-client --help            # console script
+```
+
+Both call the same `main()` in `lrPymRPC/script/client.py`.
+The module form takes `-u` to disable stdout buffering, which keeps the server output
+flowing in real time when piped into `tee`. The console script cannot take `-u`,
+so it turns on line buffering internally.
 
 ## Required Tools
 - Python 3.9+
@@ -75,7 +88,8 @@ ls ~/.tls/tls_lrpymrpc/*
 python -m lrPymRPC
   [-h] \
 	[-v] \
-	[--REPO_URL REPO_URL] \
+	[--TOOL_REQ TOOL_REQ] \
+	[--QUEUE_TYPE QUEUE_TYPE] \
 	[--CMD CMD] \
 	[--SERVER_IP SERVER_IP] \
 	[--SERVER_PORT SERVER_PORT] \
@@ -94,7 +108,8 @@ python -m lrPymRPC
 ```
   -h, --help                 show this help message and exit \
   -v, --version              show program's version number and exit \
-  --REPO_URL REPO_URL        pip-install module in repo mapping string(name=url,name=url,) \
+  --TOOL_REQ TOOL_REQ        requirements-style file listing required tools, e.g. 'ngspice>=41' (recommended name: req_tool.txt). Its content is sent with the resource request. Empty=not sent. \
+  --QUEUE_TYPE QUEUE_TYPE    preferred queue on the broker (e.g. 'high'). Ignored by a direct server. Empty=broker decides. \
   --CMD CMD                  command & parameters to module. \
   --SERVER_IP SERVER_IP      IP address of RPC server \
   --SERVER_PORT SERVER_PORT  TCP port of RPC server \
@@ -104,7 +119,7 @@ python -m lrPymRPC
   --SOURCE_EXCLUDE [SOURCE_EXCLUDE ...] Exclude files with these extensions from SOURCE (e.g. .gds .gds2). \
   --SOURCE_MATCH SOURCE_MATCH [SOURCE_MATCH ...] Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files. \
   --RUN_NAME RUN_NAME        Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution. \
-  --PIP_REQ PIP_REQ          requirements file for 'pip install -r' on the server. Must be located under --SOURCE. Requires server >= 0.4.0. \
+  --PIP_REQ PIP_REQ          requirements file for 'pip install -r' on the server (recommended name: req_pip.txt). Must be located under --SOURCE. Empty=not sent. \
   --KEEP_ARCHIVE             keep _source.tar.gz / _result.tar.gz after the run (default: remove). For debugging what was actually sent and received. \
 	--TLS_CONFIG_DIR TLS_CONFIG_DIR TLS configuration directory\
                         
@@ -124,6 +139,13 @@ python -m lrPymRPC
 git clone git@github.com:snishizawa/libretto.git
 ```
 
+- Put the Python dependencies in `req_pip.txt` (it must sit under `--SOURCE` so that it is transferred):
+
+```
+# req_pip.txt
+numpy
+```
+
 - Modify the Makefile to use lrPymRPC:
 
 ``` makefile
@@ -132,7 +154,7 @@ git clone git@github.com:snishizawa/libretto.git
 
 	python3 -m lrPymRPC \
 	--SERVER_IP 127.0.0.1 \
-	--REPO_URL "numpy=numpy" \
+	--PIP_REQ ./req_pip.txt \
 	--TLS_CONFIG_DIR "~/.tls/tls_lrpymrpc" \
 	--CMD "python $(LIBRETTO) -b $(CMD_FILE)" \
 	--SOURCE "IHP130 cmd script work" \
@@ -177,7 +199,8 @@ tar tzf _result.tar.gz | head        # what came back
 
 ## Each run starts from an empty server-side directory
 
-Every run gets a **fresh** working directory on the server (`/tmp/lrpymrpc/<PORT>/<UUID>/`), and it
+Every run gets a **fresh** working directory on the server (`/tmp/lrpymrpc/<PORT>/<work_id>/`, where
+`work_id` is the part of `session_id` after the `/`), and it
 is removed when the session ends. Nothing carries over between runs.
 
 That has two consequences worth knowing before you debug a build:
@@ -234,40 +257,115 @@ command runs or how long it stays silent - so a multi-hour `--CMD` is safe. The 
 the last RPC returns, so pick up your `--RESULT` in the same run rather than much later.
 
 
+## Resource request
+
+Before uploading anything, the client asks the server what it can actually provide.
+
+```bash
+python -u -m lrPymRPC --SERVER_IP 192.168.168.103 \
+    --TOOL_REQ ./req_tool.txt \
+    --SOURCE sample --RESULT rslt --CMD "ngspice -b in.sp"
+```
+
+`req_tool.txt` lists the tools you need, in the same notation as pip requirements:
+
+```
+# req_tool.txt
+python3>=3.12
+ngspice>=41
+```
+
+Names must match the command names in the server's `ALLOWED_BIN_FILE`. Python is usually
+listed there as `python3`, so write `python3>=3.12` — plain `python` would be reported as
+missing.
+
+The server **does not judge the request**. It replies with what it actually has
+(server version, python version, tool list, cpu/memory/disk, upload limit, session TTL)
+and the client prints it. If a requested tool is missing from the server's list the client
+prints a warning but keeps going.
+
+When a broker sits between the client and the server, it uses this request to pick or boot a
+machine, and streams progress back while you wait:
+
+```
+[192.168.0.101:8765]:Resource: queued [high 3/7, eta 120s]
+[192.168.0.101:8765]:Resource: creating VM
+[192.168.0.101:8765]:Resource: session_id=192.168.0.151/3f2a9c1e-...
+```
+
+`--QUEUE_TYPE` asks the broker for a particular queue (e.g. `high`). A direct server ignores it.
+
+### Paths are preserved, and stay under the current directory
+
+`--SOURCE` and `--RESULT` keep the directory structure you give them:
+
+```
+--SOURCE src1/src2/src3.txt  --RESULT rslt1/rslt2/rslt3.txt
+   -> extracted on the server as   src1/src2/src3.txt
+   -> collected back locally as    ./rslt1/rslt2/rslt3.txt
+```
+
+Both are restricted to the current directory. Absolute paths and `..` are rejected before
+anything is sent:
+
+```
+ERROR: --SOURCE must not escape the current directory: '../secret'
+```
+
+**Symbolic links are followed.** A link under the current directory may point outside it —
+this is how PDK trees mounted elsewhere get transferred. `--SOURCE` sends the link target's
+contents (`dereference=True`).
+
+Note that `--SOURCE_MATCH` matches against the full stored path, which is now longer than it
+was before 0.5.0 for sub-path entries.
+
+
 ## Requirements file with `--PIP_REQ`
 
-`--PIP_REQ` installs a requirements file on the server with `pip install -r` before `--REPO_URL`
-packages are installed.
+`--PIP_REQ` installs a requirements file on the server with `pip install -r`, before `--CMD` runs.
+The recommended file name is `req_pip.txt`.
 
 ```
 python -u -m lrPymRPC \
   --SERVER_IP 192.168.0.10 \
   --SOURCE pip_pkg src \
   --RESULT rslt \
-  --PIP_REQ ./pip_pkg/requirements.txt \
+  --PIP_REQ ./pip_pkg/req_pip.txt \
   --CMD "python3 -m mytool"
 ```
 
-- `--REPO_URL` and `--PIP_REQ` are independent. **Either one alone, or neither, also works.**
 - `--PIP_REQ` takes a single file. Merge multiple requirements into one file if needed.
-- Install order is **`--PIP_REQ` first, then `--REPO_URL`**.
+- Omitting it sends nothing; pip is skipped entirely.
 - pip output is streamed back in real time.
-- No import check is performed for `--PIP_REQ` (module names cannot be derived from a requirements file).
+- No import check is performed (module names cannot be derived from a requirements file).
   If pip fails, the run is aborted with `ERR: pip install -r failed ...` and `--CMD` is NOT executed.
+- Put git URLs and local packages here too — this file replaces the `--REPO_URL` option,
+  which was removed in 0.5.0:
+
+```
+# req_pip.txt
+jsoncomment
+pydantic>=2
+charao @ git+https://github.com/MatsudaLogicResearch/charao_prj.git@2.0.0
+-e ./pip_pkg/lrPya_prj
+```
 
 ### The file must be inside `--SOURCE`
 
-Each `--SOURCE` entry is stored in the archive by its **basename**, so the client rewrites the
-`--PIP_REQ` path accordingly and prints the result:
+The requirements file travels inside the source archive, so it has to be under `--SOURCE`.
+The client rewrites the path to be relative to the server's working directory and prints it:
 
 ```
-PIP_REQ: ./pip_pkg/requirements.txt -> pip_pkg/requirements.txt
+PIP_REQ: ./pip_pkg/req_pip.txt -> pip_pkg/req_pip.txt
 ```
 
 | `--SOURCE` | `--PIP_REQ` | sent to server |
 |---|---|---|
-| `pip_pkg src` | `./pip_pkg/requirements.txt` | `pip_pkg/requirements.txt` |
-| `work/pip_pkg` | `./work/pip_pkg/req.txt` | `pip_pkg/req.txt` |
+| `pip_pkg src` | `./pip_pkg/req_pip.txt` | `pip_pkg/req_pip.txt` |
+| `work/pip_pkg` | `./work/pip_pkg/req_pip.txt` | `work/pip_pkg/req_pip.txt` |
+
+The second row changed in 0.5.0: paths are now preserved instead of being flattened to the
+basename of each `--SOURCE` entry.
 
 If the file is not under `--SOURCE` (or does not exist), the client stops **before connecting**:
 
@@ -282,7 +380,7 @@ not against the location of the requirements file. On the server the working dir
 root of the extracted archive, so write paths from there:
 
 ```
-# OK (relative to the extracted archive root = basename of each --SOURCE entry)
+# OK (relative to the extracted archive root, which mirrors your --SOURCE paths)
 -e ./pip_pkg/lrPya_prj
 ./pip_pkg/mypkg-0.1.0-py3-none-any.whl
 jsoncomment
@@ -290,17 +388,6 @@ jsoncomment
 # NG (relative to the requirements file itself)
 -e ./lrPya_prj
 ```
-
-### Server version
-
-`--PIP_REQ` requires **lrPymRPC_server 0.4.0 or later**. When an older server is detected the run
-stops with:
-
-```
-ERROR: --PIP_REQ requires lrPymRPC_server >= 0.4.0, but the server is 0.3.9. Upgrade the server, or drop --PIP_REQ.
-```
-
-Runs without `--PIP_REQ` keep working against older servers.
 
 
 ## Parallel Execution with `--RUN_NAME`

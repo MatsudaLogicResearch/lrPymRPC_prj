@@ -19,92 +19,147 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.3.2"
+__version__ = "0.5.0.a01"
 
-def upload(stub, ip_port, tar_gz_path):
+#-- req_tool.txt の 1 行からツール名だけを取り出す（pip requirements と同じ記法）
+_REQ_NAME_RE = re.compile(r"^\s*([A-Za-z0-9._-]+)")
+
+
+def _req_tool_names(req_tool):
+    """req_tool.txt の中身から要求ツール名の一覧を返す。`#` コメントと空行は無視する。"""
+    names = []
+    for line in (req_tool or "").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        m = _REQ_NAME_RE.match(line)
+        if m:
+            names.append(m.group(1))
+    return names
+
+
+def _read_req_file(path, opt_name, ip_port):
+    """要求ファイル（--TOOL_REQ / --VM_REQ）を読んで中身を返す。未指定なら空文字列。
+
+    中身をそのまま RequestResource で送るだけで、client はパースしない
+    （解釈するのは broker。client に TOML パーサ等の依存を増やさないため）。
+    指定したのにファイルが無ければ、接続前に読めるエラーで止める。
+    """
+    if not path:
+        return ""
+    p = Path(path).expanduser()
+    if not p.is_file():
+        raise ValueError(f"{opt_name} file not found: {path}")
+    text = p.read_text(encoding="utf-8")
+    print(f"[{ip_port}]:{opt_name.lstrip('-')}: {path} ({len(text)} bytes)")
+    return text
+
+
+def request_resource(stub, ip_port, req_tool="", vm_info=""):
+    """リソース要求を出し、サーバの「実際の対応」を受け取る（0.5.0）。
+
+    req_tool はツール要求（req_tool.txt の中身）、vm_info は VM 要求（req_vm.toml の中身。
+    キュー種別も含む）。**どちらも直結サーバは無視する**。broker が VM 選定に使う。
+
+    broker 介在時は PROGRESS が何本でも流れる（キュー状況・VM 起動の進捗など）。
+    直結サーバは PROGRESS を送らず READY を 1 本返して終わる。
+    戻り値の session_id はこの時点では <server_ip> のみ（work_id は Upload で付く）。
+    """
+    request = file_service_pb2.ResourceRequest(req_tool=req_tool, vm_info=vm_info)
+
+    session_id = ""
+    spec = None
+    for response in stub.RequestResource(request):
+        if response.stage == file_service_pb2.ResourceResponse.PROGRESS:
+            q = ""
+            if response.queue_total:
+                q = f" [{response.queue_type or 'queue'} {response.queue_position}/{response.queue_total}"
+                q += f", eta {response.eta_sec}s]" if response.eta_sec else "]"
+            print(f"[{ip_port}]:Resource: {response.message}{q}")
+            continue
+
+        #-- READY
+        session_id = response.session_id
+        spec = response.spec
+        if response.message:
+            print(f"[{ip_port}]:Resource: {response.message}")
+
+    if not session_id:
+        raise RuntimeError("server did not return a session_id (no READY response).")
+
+    #-- サーバの実際の対応をログに出す（値が無い項目は出さない）
+    print(f"[{ip_port}]:Resource: session_id={session_id}")
+    if spec.server_version:
+        print(f"[{ip_port}]:Resource: server={spec.server_version} python={spec.python_version}")
+    if spec.tool:
+        tools = ", ".join(f"{t.name}{'=' + t.version if t.version else ''}" for t in spec.tool)
+        print(f"[{ip_port}]:Resource: tool={tools}")
+    if spec.cpu_count or spec.mem_total_mb or spec.disk_free_mb:
+        print(f"[{ip_port}]:Resource: cpu={spec.cpu_count} mem_total={spec.mem_total_mb}MB "
+              f"mem_avail={spec.mem_available_mb}MB disk_free={spec.disk_free_mb}MB")
+    if spec.max_upload_mb or spec.session_ttl_sec:
+        print(f"[{ip_port}]:Resource: max_upload={spec.max_upload_mb}MB ttl={spec.session_ttl_sec}s")
+
+    #-- 要求したツールがサーバ側に無ければ警告する（名前の有無のみ。バージョンは比較しない）。
+    #   broker 経由なら broker が調達を保証するので、ここでは停止せず警告に留める。
+    if req_tool and spec.tool:
+        have = {t.name for t in spec.tool}
+        missing = [n for n in _req_tool_names(req_tool) if n not in have]
+        if missing:
+            print(f"[{ip_port}]:Resource: WARN: not in server tool list: {', '.join(missing)}")
+
+    return session_id, spec
+
+
+def upload(stub, ip_port, session_id, tar_gz_path):
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
     with open(tar_gz_path, 'rb') as f:
-        # 送信するデータのチャンクを生成して送信
-        response = stub.Upload(iter(chunk_file(f)))
-    
-    # UploadResponse から返されたIDを取得
-    return response.unique_id
-    
+        response = stub.Upload(chunk_file(f, session_id))
 
-def chunk_file(file_obj, chunk_size=1*1024*1024):
-    """ファイルオブジェクトを受け取ってチャンクごとにデータを返す"""
-    #-- for python 3.8
-    #while chunk := file_obj.read(chunk_size):
-    #    yield file_service_pb2.DataChunk(data=chunk)
-        
+    # UploadResponse から返された session_id（<server_ip>/<work_id>）を取得
+    return response.session_id
+
+
+def chunk_file(file_obj, session_id, chunk_size=1*1024*1024):
+    """ファイルをチャンクに分けて送る。session_id は最初のチャンクのみ設定する。"""
+    first = True
     while True:
       chunk = file_obj.read(chunk_size)
       if not chunk: # exit when chunk=empty
+        if first:   # 空ファイルでも session_id だけは送る
+          yield file_service_pb2.UploadRequest(session_id=session_id, data=b"")
         break
-      yield file_service_pb2.DataChunk(data=chunk)
-
-# サーバが最初に返す "[lrPymRPC_server vX.Y.Z] Execute start" からバージョンを取り出す
-_SERVER_VER_RE = re.compile(r"\[lrPymRPC_server v([0-9][0-9A-Za-z.]*)\]")
-
-# --PIP_REQ（pip install -r）に対応したサーバの最小バージョン
-_PIP_REQ_MIN_SERVER = (0, 4, 0)
+      yield file_service_pb2.UploadRequest(
+          session_id=session_id if first else "", data=chunk)
+      first = False
 
 
-def _server_version_tuple(msg):
-    """サーバの起動メッセージから (major, minor, patch) を取り出す。取れなければ None。"""
-    m = _SERVER_VER_RE.search(msg or "")
-    if not m:
-        return None
-    nums = []
-    for part in m.group(1).split("."):
-        if not part.isdigit():
-            break
-        nums.append(int(part))
-        if len(nums) == 3:
-            break
-    if len(nums) < 3:
-        return None
-    return tuple(nums)
-
-
-def execute(stub, ip_port, unique_id, tool, command_opt, require_pip_req=False):
+def execute(stub, ip_port, session_id, command_opt, pip_req=""):
 
     # コマンドを実行
-    request = file_service_pb2.ExecuteRequest(unique_id=unique_id, tool=tool, command_opt=command_opt)
+    request = file_service_pb2.ExecuteRequest(
+        session_id=session_id, command_opt=command_opt, pip_req=pip_req)
     response_iterator = stub.Execute(request)
-    
+
     # 実行結果（リアルタイム）を受け取る
-    checked_version = not require_pip_req   # --PIP_REQ 未使用ならバージョン確認は不要
     for response in response_iterator:
-        msg=response.message
-        print(f"[{ip_port}]:{msg}")        
-
-        # --PIP_REQ 指定時は、古いサーバ（requirements を通常パッケージとして扱う）を検出して停止する
-        if not checked_version:
-            ver = _server_version_tuple(msg)
-            if ver is not None:
-                checked_version = True
-                if ver < _PIP_REQ_MIN_SERVER:
-                    vs = ".".join(str(x) for x in ver)
-                    raise RuntimeError(
-                        f"--PIP_REQ requires lrPymRPC_server >= 0.4.0, but the server is {vs}. "
-                        f"Upgrade the server, or drop --PIP_REQ.")
+        print(f"[{ip_port}]:{response.message}")
 
 
-def check(stub, ip_port, unique_id, result_dir):
+def check(stub, ip_port, session_id, result_dir):
     #print("Check:")
 
-    request = file_service_pb2.CheckRequest(unique_id=unique_id, result_dir=result_dir)
+    request = file_service_pb2.CheckRequest(session_id=session_id, result_dir=result_dir)
     response = stub.Check(request)
-    
-    return response.has_stream
- 
 
-def download(stub, ip_port, unique_id, result_dir, result_gz):
+    return response.has_stream
+
+
+def download(stub, ip_port, session_id, result_dir, result_gz):
     #print("Download:")
 
     # 実行結果をダウンロード
-    request = file_service_pb2.DownloadRequest(unique_id=unique_id, result_dir=result_dir)
+    request = file_service_pb2.DownloadRequest(session_id=session_id, result_dir=result_dir)
 
     # 実行結果（tar.gz）をダウンロード
     result = stub.Download(request)
@@ -117,6 +172,36 @@ def download(stub, ip_port, unique_id, result_dir, result_gz):
     print(f"[{ip_port}]:{msg}")        
 
         
+def _validate_path(token, opt_name):
+    """--SOURCE / --RESULT の 1 トークンを検証し、正規化した相対パスを返す（ISS-00197 / ISS-00338）。
+
+    作業ディレクトリ以下のみ許可する。他のディレクトリのファイル・ディレクトリは禁止。
+    **シンボリックリンクは通す**（リンク名が作業ディレクトリ配下なら、リンク先が外でもよい）。
+    charao_prj の `sample_src/<pdk>` が NFS 上の PDK を指す symlink で、それを転送するのが
+    実運用のため。`dereference=True` で実体が tar に入る。
+
+    判定は os.path.normpath による**文字列処理のみ**で行う。Path.resolve() は symlink を
+    辿ってしまい、上記の symlink 指定を弾いてしまうので使わない。
+    """
+    norm = os.path.normpath(token)
+    if os.path.isabs(norm):
+        raise ValueError(f"{opt_name} must be a relative path under the current directory: {token!r}")
+    if norm == ".." or norm.startswith(".." + os.sep):
+        raise ValueError(f"{opt_name} must not escape the current directory: {token!r}")
+    if norm == ".":
+        raise ValueError(f"{opt_name} must not be '.': {token!r}")
+    return norm
+
+
+def _validate_paths(spec, opt_name):
+    """空白区切りの --SOURCE / --RESULT を**トークン単位**で検証し、正規化して組み直す。
+
+    `--SOURCE "Makefile source"` のように 1 要素へ空白区切りで複数渡す書き方が実在するため、
+    argparse の要素単位ではなく空白で割ってから検証する。
+    """
+    return " ".join(_validate_path(t, opt_name) for t in spec.split(" ") if t)
+
+
 def _validate_run_name(run_name):
     """--RUN_NAME の検証。空文字列はOK（後方互換）。指定時は 1 階層のディレクトリ名のみ許可。"""
     if not run_name:
@@ -132,25 +217,30 @@ def _convert_pip_req(pip_req, source):
     """
     --PIP_REQ のローカルパスを、サーバ側（作業ディレクトリ起点）の相対パスへ変換する（ISS-00319）。
 
-    --SOURCE の各要素は tar へ basename で格納される（`tar.add(f, arcname=os.path.basename(f))`）ため、
-    ローカルの `./work/pip_pkg/req.txt`（--SOURCE work/pip_pkg）は サーバ側で `pip_pkg/req.txt` になる。
-    --SOURCE 配下に無いパスを指定した場合は、転送されないまま実行されるのを防ぐため ValueError を raise する。
+    0.5.0 で --SOURCE が**階層を保持して**転送されるようになったため（ISS-00197）、
+    変換は「作業ディレクトリ起点の相対パスへ正規化する」だけになった。
+    | --SOURCE work/pip_pkg + --PIP_REQ ./work/pip_pkg/req_pip.txt -> work/pip_pkg/req_pip.txt |
+    （0.4.x までは basename 起点で `pip_pkg/req_pip.txt` になっていた）
+
+    --SOURCE 配下に無いパスを指定した場合は、転送されないまま実行されるのを防ぐため
+    ValueError を raise する（[[ISS-00197]] と同じ「静かに迷子にならない」方針）。
     """
     if not pip_req:
         return ""
-    base = Path("./").resolve()
-    req = (base / pip_req).resolve()
-    if not req.is_file():
+
+    #-- 作業ディレクトリ以下であることを文字列で検証して正規化する
+    #   （symlink を辿らないよう resolve() は使わない。_validate_path と同じ方針）
+    req_rel = _validate_path(pip_req, "--PIP_REQ")
+
+    if not (Path("./") / req_rel).is_file():
         raise ValueError(f"--PIP_REQ file not found: {pip_req}")
 
+    #-- --SOURCE のいずれかの配下にあることを確認する（source は検証・正規化済み）
     for f in source.split(" "):
         if not f:
             continue
-        src = (base / f).resolve()
-        if req == src:
-            return os.path.basename(f)
-        if req.is_relative_to(src):
-            return f"{os.path.basename(f)}/{req.relative_to(src).as_posix()}"
+        if req_rel == f or req_rel.startswith(f + os.sep):
+            return Path(req_rel).as_posix()
 
     raise ValueError(
         f"--PIP_REQ must be located under --SOURCE (so that it is transferred): "
@@ -172,7 +262,7 @@ def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
     return _filter
 
 
-def run(tool="git://github.com", target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name="", pip_req="", keep_archive=False):
+def run(target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name="", pip_req="", tool_req="", vm_req="", keep_archive=False):
     # gRPCチャンネルを作成
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
@@ -200,14 +290,27 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     #--
     stub = file_service_pb2_grpc.FileServiceStub(channel)
 
-    # ======== tool チャネルの組み立て ========
-    # --PIP_REQ は module 名が空の項目（"=<requirement path>"）としてサーバへ渡す（ISS-00319）
-    # --REPO_URL / --PIP_REQ はどちらか片方だけでも、両方省略でも動作する
+    # ======== --PIP_REQ のパス変換 ========
+    # ローカル表記のパスを、サーバ側（作業ディレクトリ起点）の相対パスへ変換する（ISS-00319）。
+    # 実体は tar で届くので、--SOURCE 配下であることをここで検証して停止する。
+    pip_req_remote = ""
     if pip_req:
         pip_req_remote = _convert_pip_req(pip_req, source)
         msg=f"PIP_REQ: {pip_req} -> {pip_req_remote}"
         print(f"[{ip_port}]:{msg}")
-        tool = ",".join(x for x in [f"={pip_req_remote}", tool] if x)
+
+    # ======== --TOOL_REQ / --VM_REQ の読み込み ========
+    # 要求はファイルの「中身」を RequestResource で送る（tar には乗せない）。
+    # Upload より前に要求を出す必要があるため。未指定なら送るデータは無い。
+    tool_req_text = _read_req_file(tool_req, "--TOOL_REQ", ip_port)
+    vm_req_text   = _read_req_file(vm_req,   "--VM_REQ",   ip_port)
+
+    # ======== リソース要求（0.5.0）========
+    # client が要求を出し、server が「実際の対応」を返す。
+    # broker 介在時は VM が用意できるまで PROGRESS が流れる。
+    print(f"[{ip_port}]:Resource: request")
+    session_id, _spec = request_resource(stub, ip_port,
+                                         req_tool=tool_req_text, vm_info=vm_req_text)
 
     # ======== SOURCEファイル準備 ========
     # ディレクトリをtar.gzに圧縮
@@ -231,19 +334,11 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     tar_filter = _make_tar_filter(source_include or [], source_exclude or [], source_match or [])
 
     with tarfile.open(source_gz, 'w:gz', dereference=True) as tar:
+      # source_dir は _validate_paths() で検証・正規化済み（作業ディレクトリ以下のみ）。
+      # arcname に正規化後の相対パスを使うので **階層が保持される**（ISS-00197）。
       for f in source_dir.split(" "):
-        #source_path = (base_dir / f).resolve()
         source_path = (base_dir / f)
 
-        ## only current directory
-        #print(f"f={f}")
-        #print(f"s={source_path}")
-        #print(f"b={base_dir}")
-        if not source_path.is_relative_to(base_dir):
-          msg=f"Check: Not Exist in current directory, removed from source_dir={f}"
-          print(f"[{ip_port}]:{msg}")
-          continue
-      
         ## check exist
         if not os.path.exists(source_path):
           msg=f"Check: Not Exist source_dir={f}"
@@ -253,35 +348,43 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
         ## add files
         msg=f"Check: Exist source_dir={f}"
         print(f"[{ip_port}]:{msg}")
-        tar.add(f, arcname=os.path.basename(f), filter=tar_filter)
+        tar.add(f, arcname=f, filter=tar_filter)
         
     # ======== UPLOAD処理 ========
-    # データをアップロードしてIDを受け取る
+    # データをアップロードする。session_id に work_id が付いて返る
+    # （<server_ip> → <server_ip>/<work_id>）
     print(f"[{ip_port}]:Upload")
-    
-    unique_id = upload(stub, ip_port, source_gz)
-    print(f"[{ip_port}]:Upload: unique id={unique_id}")
+
+    session_id = upload(stub, ip_port, session_id, source_gz)
+    print(f"[{ip_port}]:Upload: session_id={session_id}")
 
     # ======== CMD処理 ========
     # コマンドを送信し、出力をリアルタイムで受け取る
-    print(f"[{ip_port}]:Upload: pip install   ={tool}")
+    if pip_req_remote:
+      print(f"[{ip_port}]:Upload: pip install -r={pip_req_remote}")
     print(f"[{ip_port}]:Upload: Execute target={target}")
-    execute(stub, ip_port, unique_id, tool, target, require_pip_req=bool(pip_req))    
+    execute(stub, ip_port, session_id, target, pip_req=pip_req_remote)
 
     # ======== RESULT受信処理 ========
     # 実行結果の有無をチェック
     print(f"[{ip_port}]:Check: result.")
-    has_stream = check(stub, ip_port, unique_id, result_dir)
+    has_stream = check(stub, ip_port, session_id, result_dir)
 
     # 実行結果を受け取って展開する
     if has_stream:
       print(f"[{ip_port}]:Check: Download data is exist.")
-      download(stub, ip_port, unique_id, result_dir, result_gz)
+      download(stub, ip_port, session_id, result_dir, result_gz)
     
       # 実行結果を展開
+      # filter='data' で、作業ディレクトリの外を指すメンバー（絶対パス・`..`・外部 symlink）を
+      # 拒否する（ISS-00339）。Python 3.9/3.10 には filter 引数が無いのでフォールバックする。
       print(f"[{ip_port}]:Check: Extract result.")
+      extract_to = run_name if run_name else '.'
       with tarfile.open(result_gz, 'r:gz') as tar:
-        tar.extractall(path=run_name if run_name else '.')
+        try:
+          tar.extractall(path=extract_to, filter='data')
+        except TypeError:
+          tar.extractall(path=extract_to)
     else:
       print(f"[{ip_port}]:Check: Download data is not exist.")
 
@@ -301,9 +404,16 @@ def run(tool="git://github.com", target="help", server_ip="localhost", server_po
     print(f"[{ip_port}]:Finish: done.")
     
 def main():
+    # console script（lrRPC-client）経由では `python -u` を付けられないため、stdout を
+    # 行バッファリングにしてサーバ出力をリアルタイムに流す（ISS-00323）。
+    # `python -u -m lrPymRPC` 経由では既に unbuffered なので無害。
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except AttributeError:
+        pass
+
     pars = argparse.ArgumentParser()
     pars.add_argument('-v',"--version"     ,action='version', version=f'%(prog)s {__version__}')
-    pars.add_argument('--REPO_URL'    ,type=str ,default=""     ,help="repo mapping string(name=url,name=url,)")
     pars.add_argument('--CMD'         ,type=str ,default="charao -h"  ,help="command & parameters to module.")
     pars.add_argument('--SERVER_IP'   ,type=str ,default="127.0.0.1"  ,help="IP address of RPC server")
     pars.add_argument('--SERVER_PORT' ,type=str ,default="8766"       ,help="TCP port of RPC server")
@@ -313,7 +423,9 @@ def main():
     pars.add_argument('--SOURCE_EXCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Exclude files with these extensions from SOURCE (e.g. .gds .gds2).")
     pars.add_argument('--SOURCE_MATCH'   ,type=str ,default=[]         ,nargs="+" ,help="Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files.")
     pars.add_argument('--RUN_NAME'       ,type=str ,default=""                  ,help="Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution.")
-    pars.add_argument('--PIP_REQ'        ,type=str ,default=""                  ,help="requirements file for 'pip install -r' on the server. Must be located under --SOURCE. Requires server >= 0.4.0.")
+    pars.add_argument('--PIP_REQ'        ,type=str ,default=""                  ,help="requirements file for 'pip install -r' on the server (recommended name: req_pip.txt). Must be located under --SOURCE. Empty=not sent.")
+    pars.add_argument('--TOOL_REQ'       ,type=str ,default=""                  ,help="requirements-style file listing required tools, e.g. 'ngspice>=41' (recommended name: req_tool.txt). Its content is sent with the resource request. Empty=not sent.")
+    pars.add_argument('--VM_REQ'         ,type=str ,default=""                  ,help="TOML file describing the VM resources you need, incl. the preferred queue (recommended name: req_vm.toml). Its content is sent with the resource request and used by a broker; a direct server ignores it. Empty=not sent.")
     pars.add_argument('--KEEP_ARCHIVE'   ,action="store_true"                    ,help="keep _source.tar.gz / _result.tar.gz after the run (default: remove). For debugging what was actually sent and received.")
     pars.add_argument('--TLS_CONFIG_DIR'    ,default=""  ,help="TLS configuration directory. if empty, Connection not use TLS.")
     
@@ -369,15 +481,22 @@ def main():
     if not result:
       result = ""
 
-    # RUN_NAME の検証（空文字列はOK、それ以外は 1 階層のディレクトリ名のみ許可）
-    run_name = _validate_run_name(args.RUN_NAME)
-
     #
-    # --PIP_REQ の指定ミス（SOURCE 外・不在）とサーバ版数不足は、利用者が読める 1 行の
+    # 引数の指定ミス（--RUN_NAME の書式、--SOURCE / --RESULT が作業ディレクトリの外、
+    # --PIP_REQ が SOURCE 外・不在、--TOOL_REQ のファイル不在）は、利用者が読める 1 行の
     # エラーで止める（トレースバックを出さない。TLS ファイル不在時の表示スタイルに合わせる）
     try:
-      run(tool           =args.REPO_URL,
-          target         =args.CMD,
+      # RUN_NAME の検証（空文字列はOK、それ以外は 1 階層のディレクトリ名のみ許可）
+      run_name = _validate_run_name(args.RUN_NAME)
+
+      # SOURCE / RESULT の検証と正規化（作業ディレクトリ以下のみ、ISS-00197 / ISS-00338）。
+      # 空白区切りのトークン単位で見る（`--SOURCE "Makefile source"` の形が実在するため）。
+      if source:
+        source = _validate_paths(source, "--SOURCE")
+      if result:
+        result = _validate_paths(result, "--RESULT")
+
+      run(target         =args.CMD,
           server_ip      =args.SERVER_IP,
           server_port    =args.SERVER_PORT,
           client_key     =client_key,
@@ -390,6 +509,8 @@ def main():
           source_match   =source_match,
           run_name       =run_name,
           pip_req        =args.PIP_REQ,
+          tool_req       =args.TOOL_REQ,
+          vm_req         =args.VM_REQ,
           keep_archive   =args.KEEP_ARCHIVE)
     except (ValueError, RuntimeError) as e:
       print(f"ERROR: {e}")

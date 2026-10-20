@@ -1,0 +1,16 @@
+# --TOOL_REQ で指定するツール要求の例。
+#
+# 中身が RequestResource で送られる（tar には乗らない。Upload より前に要求を出すため）。
+# 書式は pip requirements と同じ（name>=version、# コメント、空行は無視）。
+#
+# **ツール名はサーバの --ALLOWED_BIN_FILE に載るコマンド名と一致させること。**
+# 例えば python は多くの環境で `python3` という名前で allowlist に載るので、
+# `python>=3.12` と書くと「サーバに無い」と警告が出る。`python3>=3.12` と書く。
+#
+# **サーバは判定しない。** 自分の実際の対応（ServerSpec）を返すだけで、
+# 突き合わせは client が行う（要求したツールが無ければ警告を出すが停止はしない）。
+# broker はこれを見て起動する VM イメージを選ぶ。
+
+python3>=3.12
+ngspice>=41
+klayout>=0.28

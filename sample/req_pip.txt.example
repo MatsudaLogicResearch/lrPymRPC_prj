@@ -1,0 +1,17 @@
+# --PIP_REQ で指定する requirements ファイルの例。
+#
+# --SOURCE 配下に置くこと（tar で転送されるため）。サーバ側では作業ディレクトリを
+# 起点に `pip install -r` される。相対パスは requirements ファイルの位置ではなく
+# **作業ディレクトリ基準**で解決される点に注意。
+#
+# 0.5.0 で --REPO_URL を廃止したので、git URL やローカルパッケージもここに書く。
+
+jsoncomment
+pydantic>=2
+numpy
+
+# git から（TAG 固定）
+charao @ git+https://github.com/MatsudaLogicResearch/charao_prj.git@2.0.0
+
+# ローカルに clone したものを editable で（--SOURCE に pip_pkg を含めること）
+-e ./pip_pkg/lrPya_prj
