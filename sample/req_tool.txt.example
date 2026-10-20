@@ -1,4 +1,4 @@
-# --TOOL_REQ で指定するツール要求の例。
+# --REQ_TOOL で指定するツール要求の例。
 #
 # 中身が RequestResource で送られる（tar には乗らない。Upload より前に要求を出すため）。
 # 書式は pip requirements と同じ（name>=version、# コメント、空行は無視）。

@@ -15,11 +15,14 @@ TLS handshake:
     ca.crt    --+ 
  
 DATAFLOW: 
-   req_tool   ==[RequestResource]======>  returns server spec & session_id 
-   SOURCE     ==[stream:UploadRequest]=>  /tmp/<PORT>/<work_id>/SOURCE  (paths preserved) 
-   pip_req    ==[request:pip_req]======>  pip install -r <pip_req> 
-   CMD        ==[request:command_opt]==>  execute <CMD> 
-   RESULT     <=[stream:DataChunk]=====   /tmp/<PORT>/<work_id>/RESULT  (paths preserved) 
+   REQ_TOOL  ==[RequestResource:req_tool]=>  ignored by server (a broker picks a VM image) 
+   REQ_VM    ==[RequestResource:req_vm]===>  ignored by server (a broker picks a VM plan) 
+             <=[ResourceResponse]=========   ServerSpec &amp; session_id(&lt;server_ip&gt;) 
+   SOURCE    ==[stream:UploadRequest]=====>  /tmp/&lt;PORT&gt;/&lt;work_id&gt;/SOURCE  (paths preserved) 
+             <=[UploadResponse]===========   session_id(&lt;server_ip&gt;/&lt;work_id&gt;) 
+   REQ_PIP   ==[request:req_pip]==========>  pip install -r &lt;REQ_PIP&gt; 
+   CMD       ==[request:command_opt]======>  execute &lt;CMD&gt; 
+   RESULT    <=[stream:DataChunk]=========   /tmp/&lt;PORT&gt;/&lt;work_id&gt;/RESULT  (paths preserved) 
 </pre>
 
 
@@ -88,41 +91,40 @@ ls ~/.tls/tls_lrpymrpc/*
 python -m lrPymRPC
   [-h] \
 	[-v] \
-	[--TOOL_REQ TOOL_REQ] \
-	[--QUEUE_TYPE QUEUE_TYPE] \
-	[--CMD CMD] \
 	[--SERVER_IP SERVER_IP] \
 	[--SERVER_PORT SERVER_PORT] \
+	[--TLS_CONFIG_DIR TLS_CONFIG_DIR] \
+	[--REQ_PIP REQ_PIP] \
+	[--REQ_TOOL REQ_TOOL] \
+	[--REQ_VM REQ_VM] \
 	[--SOURCE SOURCE [SOURCE ...]] \
-	[--RESULT RESULT [RESULT ...]] \
 	[--SOURCE_INCLUDE [SOURCE_INCLUDE ...]] \
 	[--SOURCE_EXCLUDE [SOURCE_EXCLUDE ...]] \
 	[--SOURCE_MATCH SOURCE_MATCH [SOURCE_MATCH ...]] \
+	[--RESULT RESULT [RESULT ...]] \
+	[--CMD CMD] \
 	[--RUN_NAME RUN_NAME] \
-	[--PIP_REQ PIP_REQ] \
 	[--KEEP_ARCHIVE] \
-	[--TLS_CONFIG_DIR TLS_CONFIG_DIR] \
 ```
 
 ### option
 ```
   -h, --help                 show this help message and exit \
   -v, --version              show program's version number and exit \
-  --TOOL_REQ TOOL_REQ        requirements-style file listing required tools, e.g. 'ngspice>=41' (recommended name: req_tool.txt). Its content is sent with the resource request. Empty=not sent. \
-  --QUEUE_TYPE QUEUE_TYPE    preferred queue on the broker (e.g. 'high'). Ignored by a direct server. Empty=broker decides. \
-  --CMD CMD                  command & parameters to module. \
   --SERVER_IP SERVER_IP      IP address of RPC server \
   --SERVER_PORT SERVER_PORT  TCP port of RPC server \
+  --TLS_CONFIG_DIR TLS_CONFIG_DIR  TLS configuration directory. if empty, Connection not use TLS. \
+  --REQ_PIP REQ_PIP          requirements file for 'pip install -r' on the server (recommended name: req_pip.txt). Must be located under --SOURCE. Empty=not sent. \
+  --REQ_TOOL REQ_TOOL        requirements-style file listing required tools, e.g. 'ngspice>=41' (recommended name: req_tool.txt). Its content is sent with the resource request. Empty=not sent. \
+  --REQ_VM REQ_VM            TOML file describing the VM resources you need, incl. the preferred queue (recommended name: req_vm.toml). Its content is sent with the resource request and used by a broker; a direct server ignores it. Empty=not sent. \
   --SOURCE SOURCE [SOURCE ...] source directory used in make command. \
-  --RESULT RESULT [RESULT ...] result directory output by make command. \
   --SOURCE_INCLUDE [SOURCE_INCLUDE ...] Include only files with these extensions in SOURCE (e.g. .cdl .sp). Empty=all files. \
   --SOURCE_EXCLUDE [SOURCE_EXCLUDE ...] Exclude files with these extensions from SOURCE (e.g. .gds .gds2). \
   --SOURCE_MATCH SOURCE_MATCH [SOURCE_MATCH ...] Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files. \
+  --RESULT RESULT [RESULT ...] result directory output by make command. \
+  --CMD CMD                  command & parameters to module. \
   --RUN_NAME RUN_NAME        Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution. \
-  --PIP_REQ PIP_REQ          requirements file for 'pip install -r' on the server (recommended name: req_pip.txt). Must be located under --SOURCE. Empty=not sent. \
   --KEEP_ARCHIVE             keep _source.tar.gz / _result.tar.gz after the run (default: remove). For debugging what was actually sent and received. \
-	--TLS_CONFIG_DIR TLS_CONFIG_DIR TLS configuration directory\
-                        
 ```
 
 
@@ -154,7 +156,7 @@ numpy
 
 	python3 -m lrPymRPC \
 	--SERVER_IP 127.0.0.1 \
-	--PIP_REQ ./req_pip.txt \
+	--REQ_PIP ./req_pip.txt \
 	--TLS_CONFIG_DIR "~/.tls/tls_lrpymrpc" \
 	--CMD "python $(LIBRETTO) -b $(CMD_FILE)" \
 	--SOURCE "IHP130 cmd script work" \
@@ -263,7 +265,7 @@ Before uploading anything, the client asks the server what it can actually provi
 
 ```bash
 python -u -m lrPymRPC --SERVER_IP 192.168.168.103 \
-    --TOOL_REQ ./req_tool.txt \
+    --REQ_TOOL ./req_tool.txt \
     --SOURCE sample --RESULT rslt --CMD "ngspice -b in.sp"
 ```
 
@@ -293,7 +295,21 @@ machine, and streams progress back while you wait:
 [192.168.0.101:8765]:Resource: session_id=192.168.0.151/3f2a9c1e-...
 ```
 
-`--QUEUE_TYPE` asks the broker for a particular queue (e.g. `high`). A direct server ignores it.
+`--REQ_VM` describes the machine you need. The queue goes in here too, so there is no separate
+option for it. A direct server ignores the whole thing.
+
+```toml
+# req_vm.toml
+queue     = "high"   # preferred queue
+cpu_count = 4        # at least 4 vCPU
+mem_mb    = 8192     # at least 8 GB
+disk_mb   = 51200
+max_par   = 4        # jobs to run on one VM
+count     = 10       # VMs to reserve at once
+```
+
+Only the keys you write become requirements; the rest is left to the broker. The client reads the
+file and sends it verbatim — it does not parse it, so no TOML library is needed on the client side.
 
 ### Paths are preserved, and stay under the current directory
 
@@ -320,9 +336,9 @@ Note that `--SOURCE_MATCH` matches against the full stored path, which is now lo
 was before 0.5.0 for sub-path entries.
 
 
-## Requirements file with `--PIP_REQ`
+## Requirements file with `--REQ_PIP`
 
-`--PIP_REQ` installs a requirements file on the server with `pip install -r`, before `--CMD` runs.
+`--REQ_PIP` installs a requirements file on the server with `pip install -r`, before `--CMD` runs.
 The recommended file name is `req_pip.txt`.
 
 ```
@@ -330,11 +346,11 @@ python -u -m lrPymRPC \
   --SERVER_IP 192.168.0.10 \
   --SOURCE pip_pkg src \
   --RESULT rslt \
-  --PIP_REQ ./pip_pkg/req_pip.txt \
+  --REQ_PIP ./pip_pkg/req_pip.txt \
   --CMD "python3 -m mytool"
 ```
 
-- `--PIP_REQ` takes a single file. Merge multiple requirements into one file if needed.
+- `--REQ_PIP` takes a single file. Merge multiple requirements into one file if needed.
 - Omitting it sends nothing; pip is skipped entirely.
 - pip output is streamed back in real time.
 - No import check is performed (module names cannot be derived from a requirements file).
@@ -356,10 +372,10 @@ The requirements file travels inside the source archive, so it has to be under `
 The client rewrites the path to be relative to the server's working directory and prints it:
 
 ```
-PIP_REQ: ./pip_pkg/req_pip.txt -> pip_pkg/req_pip.txt
+REQ_PIP: ./pip_pkg/req_pip.txt -> pip_pkg/req_pip.txt
 ```
 
-| `--SOURCE` | `--PIP_REQ` | sent to server |
+| `--SOURCE` | `--REQ_PIP` | sent to server |
 |---|---|---|
 | `pip_pkg src` | `./pip_pkg/req_pip.txt` | `pip_pkg/req_pip.txt` |
 | `work/pip_pkg` | `./work/pip_pkg/req_pip.txt` | `work/pip_pkg/req_pip.txt` |
@@ -370,7 +386,7 @@ basename of each `--SOURCE` entry.
 If the file is not under `--SOURCE` (or does not exist), the client stops **before connecting**:
 
 ```
-ERROR: --PIP_REQ must be located under --SOURCE (so that it is transferred): ...
+ERROR: --REQ_PIP must be located under --SOURCE (so that it is transferred): ...
 ```
 
 ### Paths inside the requirements file

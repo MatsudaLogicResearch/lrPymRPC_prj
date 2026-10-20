@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!lrPymRPC/proto/file_service.proto\"\x19\n\tDataChunk\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\"4\n\x0fResourceRequest\x12\x10\n\x08req_tool\x18\x01 \x01(\t\x12\x0f\n\x07vm_info\x18\x02 \x01(\t\"\xee\x01\n\x10ResourceResponse\x12&\n\x05stage\x18\x01 \x01(\x0e\x32\x17.ResourceResponse.Stage\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\t\x12\x19\n\x04spec\x18\x04 \x01(\x0b\x32\x0b.ServerSpec\x12\x12\n\nqueue_type\x18\x05 \x01(\t\x12\x16\n\x0equeue_position\x18\x06 \x01(\x05\x12\x13\n\x0bqueue_total\x18\x07 \x01(\x05\x12\x0f\n\x07\x65ta_sec\x18\x08 \x01(\x05\" \n\x05Stage\x12\x0c\n\x08PROGRESS\x10\x00\x12\t\n\x05READY\x10\x01\"\xde\x01\n\nServerSpec\x12\x16\n\x0eserver_version\x18\x01 \x01(\t\x12\x16\n\x0epython_version\x18\x02 \x01(\t\x12\x17\n\x04tool\x18\x03 \x03(\x0b\x32\t.ToolSpec\x12\x11\n\tcpu_count\x18\x04 \x01(\x05\x12\x14\n\x0cmem_total_mb\x18\x05 \x01(\x03\x12\x18\n\x10mem_available_mb\x18\x06 \x01(\x03\x12\x14\n\x0c\x64isk_free_mb\x18\x07 \x01(\x03\x12\x15\n\rmax_upload_mb\x18\x08 \x01(\x05\x12\x17\n\x0fsession_ttl_sec\x18\t \x01(\x05\")\n\x08ToolSpec\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\"1\n\rUploadRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\"$\n\x0eUploadResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\"J\n\x0e\x45xecuteRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x13\n\x0b\x63ommand_opt\x18\x02 \x01(\t\x12\x0f\n\x07pip_req\x18\x03 \x01(\t\"\"\n\x0f\x45xecuteResponse\x12\x0f\n\x07message\x18\x01 \x01(\t\"6\n\x0c\x43heckRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x12\n\nresult_dir\x18\x02 \x01(\t\"#\n\rCheckResponse\x12\x12\n\nhas_stream\x18\x01 \x01(\x08\"9\n\x0f\x44ownloadRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x12\n\nresult_dir\x18\x02 \x01(\t2\xf8\x01\n\x0b\x46ileService\x12\x38\n\x0fRequestResource\x12\x10.ResourceRequest\x1a\x11.ResourceResponse0\x01\x12+\n\x06Upload\x12\x0e.UploadRequest\x1a\x0f.UploadResponse(\x01\x12.\n\x07\x45xecute\x12\x0f.ExecuteRequest\x1a\x10.ExecuteResponse0\x01\x12&\n\x05\x43heck\x12\r.CheckRequest\x1a\x0e.CheckResponse\x12*\n\x08\x44ownload\x12\x10.DownloadRequest\x1a\n.DataChunk0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!lrPymRPC/proto/file_service.proto\"\x19\n\tDataChunk\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\"3\n\x0fResourceRequest\x12\x10\n\x08req_tool\x18\x01 \x01(\t\x12\x0e\n\x06req_vm\x18\x02 \x01(\t\"\xee\x01\n\x10ResourceResponse\x12&\n\x05stage\x18\x01 \x01(\x0e\x32\x17.ResourceResponse.Stage\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\t\x12\x19\n\x04spec\x18\x04 \x01(\x0b\x32\x0b.ServerSpec\x12\x12\n\nqueue_type\x18\x05 \x01(\t\x12\x16\n\x0equeue_position\x18\x06 \x01(\x05\x12\x13\n\x0bqueue_total\x18\x07 \x01(\x05\x12\x0f\n\x07\x65ta_sec\x18\x08 \x01(\x05\" \n\x05Stage\x12\x0c\n\x08PROGRESS\x10\x00\x12\t\n\x05READY\x10\x01\"\xde\x01\n\nServerSpec\x12\x16\n\x0eserver_version\x18\x01 \x01(\t\x12\x16\n\x0epython_version\x18\x02 \x01(\t\x12\x17\n\x04tool\x18\x03 \x03(\x0b\x32\t.ToolSpec\x12\x11\n\tcpu_count\x18\x04 \x01(\x05\x12\x14\n\x0cmem_total_mb\x18\x05 \x01(\x03\x12\x18\n\x10mem_available_mb\x18\x06 \x01(\x03\x12\x14\n\x0c\x64isk_free_mb\x18\x07 \x01(\x03\x12\x15\n\rmax_upload_mb\x18\x08 \x01(\x05\x12\x17\n\x0fsession_ttl_sec\x18\t \x01(\x05\")\n\x08ToolSpec\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\"1\n\rUploadRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\"$\n\x0eUploadResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\"J\n\x0e\x45xecuteRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x13\n\x0b\x63ommand_opt\x18\x02 \x01(\t\x12\x0f\n\x07req_pip\x18\x03 \x01(\t\"\"\n\x0f\x45xecuteResponse\x12\x0f\n\x07message\x18\x01 \x01(\t\"6\n\x0c\x43heckRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x12\n\nresult_dir\x18\x02 \x01(\t\"#\n\rCheckResponse\x12\x12\n\nhas_stream\x18\x01 \x01(\x08\"9\n\x0f\x44ownloadRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x12\n\nresult_dir\x18\x02 \x01(\t2\xf8\x01\n\x0b\x46ileService\x12\x38\n\x0fRequestResource\x12\x10.ResourceRequest\x1a\x11.ResourceResponse0\x01\x12+\n\x06Upload\x12\x0e.UploadRequest\x1a\x0f.UploadResponse(\x01\x12.\n\x07\x45xecute\x12\x0f.ExecuteRequest\x1a\x10.ExecuteResponse0\x01\x12&\n\x05\x43heck\x12\r.CheckRequest\x1a\x0e.CheckResponse\x12*\n\x08\x44ownload\x12\x10.DownloadRequest\x1a\n.DataChunk0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,29 +34,29 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_DATACHUNK']._serialized_start=37
   _globals['_DATACHUNK']._serialized_end=62
   _globals['_RESOURCEREQUEST']._serialized_start=64
-  _globals['_RESOURCEREQUEST']._serialized_end=116
-  _globals['_RESOURCERESPONSE']._serialized_start=119
-  _globals['_RESOURCERESPONSE']._serialized_end=357
-  _globals['_RESOURCERESPONSE_STAGE']._serialized_start=325
-  _globals['_RESOURCERESPONSE_STAGE']._serialized_end=357
-  _globals['_SERVERSPEC']._serialized_start=360
-  _globals['_SERVERSPEC']._serialized_end=582
-  _globals['_TOOLSPEC']._serialized_start=584
-  _globals['_TOOLSPEC']._serialized_end=625
-  _globals['_UPLOADREQUEST']._serialized_start=627
-  _globals['_UPLOADREQUEST']._serialized_end=676
-  _globals['_UPLOADRESPONSE']._serialized_start=678
-  _globals['_UPLOADRESPONSE']._serialized_end=714
-  _globals['_EXECUTEREQUEST']._serialized_start=716
-  _globals['_EXECUTEREQUEST']._serialized_end=790
-  _globals['_EXECUTERESPONSE']._serialized_start=792
-  _globals['_EXECUTERESPONSE']._serialized_end=826
-  _globals['_CHECKREQUEST']._serialized_start=828
-  _globals['_CHECKREQUEST']._serialized_end=882
-  _globals['_CHECKRESPONSE']._serialized_start=884
-  _globals['_CHECKRESPONSE']._serialized_end=919
-  _globals['_DOWNLOADREQUEST']._serialized_start=921
-  _globals['_DOWNLOADREQUEST']._serialized_end=978
-  _globals['_FILESERVICE']._serialized_start=981
-  _globals['_FILESERVICE']._serialized_end=1229
+  _globals['_RESOURCEREQUEST']._serialized_end=115
+  _globals['_RESOURCERESPONSE']._serialized_start=118
+  _globals['_RESOURCERESPONSE']._serialized_end=356
+  _globals['_RESOURCERESPONSE_STAGE']._serialized_start=324
+  _globals['_RESOURCERESPONSE_STAGE']._serialized_end=356
+  _globals['_SERVERSPEC']._serialized_start=359
+  _globals['_SERVERSPEC']._serialized_end=581
+  _globals['_TOOLSPEC']._serialized_start=583
+  _globals['_TOOLSPEC']._serialized_end=624
+  _globals['_UPLOADREQUEST']._serialized_start=626
+  _globals['_UPLOADREQUEST']._serialized_end=675
+  _globals['_UPLOADRESPONSE']._serialized_start=677
+  _globals['_UPLOADRESPONSE']._serialized_end=713
+  _globals['_EXECUTEREQUEST']._serialized_start=715
+  _globals['_EXECUTEREQUEST']._serialized_end=789
+  _globals['_EXECUTERESPONSE']._serialized_start=791
+  _globals['_EXECUTERESPONSE']._serialized_end=825
+  _globals['_CHECKREQUEST']._serialized_start=827
+  _globals['_CHECKREQUEST']._serialized_end=881
+  _globals['_CHECKRESPONSE']._serialized_start=883
+  _globals['_CHECKRESPONSE']._serialized_end=918
+  _globals['_DOWNLOADREQUEST']._serialized_start=920
+  _globals['_DOWNLOADREQUEST']._serialized_end=977
+  _globals['_FILESERVICE']._serialized_start=980
+  _globals['_FILESERVICE']._serialized_end=1228
 # @@protoc_insertion_point(module_scope)

@@ -1,4 +1,4 @@
-# --PIP_REQ で指定する requirements ファイルの例。
+# --REQ_PIP で指定する requirements ファイルの例。
 #
 # --SOURCE 配下に置くこと（tar で転送されるため）。サーバ側では作業ディレクトリを
 # 起点に `pip install -r` される。相対パスは requirements ファイルの位置ではなく

@@ -3,6 +3,33 @@
 このファイルは UTF-8 で記述されています。
 
 ---
+## [0.5.0.a02] 2026-10-20
+### 変更：要求オプションを REQ_* に統一（ISS-00337）
+
+**BREAKING CHANGE（0.5.0.a01 からの変更）。** 0.4.x から見れば 0.5.0 全体が非互換なので、
+正式版 0.5.0 の前にここで名前を揃えた。
+
+| 0.5.0.a01 | 0.5.0.a02 |
+|---|---|
+| `--PIP_REQ` | **`--REQ_PIP`** |
+| `--TOOL_REQ` | **`--REQ_TOOL`** |
+| `--VM_REQ` | **`--REQ_VM`** |
+
+- ファイル名（`req_pip.txt` / `req_tool.txt` / `req_vm.toml`）と並びが揃う
+- **proto のフィールド名も揃えた**：`ResourceRequest.vm_info` → **`req_vm`**、
+  `ExecuteRequest.pip_req` → **`req_pip`**（`req_tool` は変更なし）
+- **usage の表示順を README と一致させた**（`add_argument` の呼び出し順を並べ替え）。
+  接続系（`--SERVER_IP` / `--SERVER_PORT` / `--TLS_CONFIG_DIR`）→ 要求ファイル系
+  （`--REQ_PIP` / `--REQ_TOOL` / `--REQ_VM`）→ `--SOURCE` 系 → `--RESULT` → `--CMD` →
+  `--RUN_NAME` → `--KEEP_ARCHIVE`。**server 側も同じ思想で並べ替えた**
+- Introduction の DATAFLOW 図を 0.5.0 の流れに書き直した
+  （`RequestResource` の往復、`UploadResponse` での session_id、階層保持の明示）
+
+### 修正：README のオプション名が実装と食い違っていた
+
+`--QUEUE_TYPE` を `--VM_REQ` へ変更した際に README を直し忘れていた（0.5.0.a01 の漏れ）。
+あわせて `req_vm.toml` のサンプルを README に載せた。
+
 ## [0.5.0.a01] 2026-10-19
 ### 変更：プロトコル刷新（RequestResource 追加、REPO_URL 廃止）（ISS-00337）
 

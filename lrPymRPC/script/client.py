@@ -19,7 +19,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.5.0.a01"
+__version__ = "0.5.0.a02"
 
 #-- req_tool.txt の 1 行からツール名だけを取り出す（pip requirements と同じ記法）
 _REQ_NAME_RE = re.compile(r"^\s*([A-Za-z0-9._-]+)")
@@ -39,7 +39,7 @@ def _req_tool_names(req_tool):
 
 
 def _read_req_file(path, opt_name, ip_port):
-    """要求ファイル（--TOOL_REQ / --VM_REQ）を読んで中身を返す。未指定なら空文字列。
+    """要求ファイル（--REQ_TOOL / --REQ_VM）を読んで中身を返す。未指定なら空文字列。
 
     中身をそのまま RequestResource で送るだけで、client はパースしない
     （解釈するのは broker。client に TOML パーサ等の依存を増やさないため）。
@@ -55,17 +55,17 @@ def _read_req_file(path, opt_name, ip_port):
     return text
 
 
-def request_resource(stub, ip_port, req_tool="", vm_info=""):
+def request_resource(stub, ip_port, req_tool="", req_vm=""):
     """リソース要求を出し、サーバの「実際の対応」を受け取る（0.5.0）。
 
-    req_tool はツール要求（req_tool.txt の中身）、vm_info は VM 要求（req_vm.toml の中身。
+    req_tool はツール要求（req_tool.txt の中身）、req_vm は VM 要求（req_vm.toml の中身。
     キュー種別も含む）。**どちらも直結サーバは無視する**。broker が VM 選定に使う。
 
     broker 介在時は PROGRESS が何本でも流れる（キュー状況・VM 起動の進捗など）。
     直結サーバは PROGRESS を送らず READY を 1 本返して終わる。
     戻り値の session_id はこの時点では <server_ip> のみ（work_id は Upload で付く）。
     """
-    request = file_service_pb2.ResourceRequest(req_tool=req_tool, vm_info=vm_info)
+    request = file_service_pb2.ResourceRequest(req_tool=req_tool, req_vm=req_vm)
 
     session_id = ""
     spec = None
@@ -134,11 +134,11 @@ def chunk_file(file_obj, session_id, chunk_size=1*1024*1024):
       first = False
 
 
-def execute(stub, ip_port, session_id, command_opt, pip_req=""):
+def execute(stub, ip_port, session_id, command_opt, req_pip=""):
 
     # コマンドを実行
     request = file_service_pb2.ExecuteRequest(
-        session_id=session_id, command_opt=command_opt, pip_req=pip_req)
+        session_id=session_id, command_opt=command_opt, req_pip=req_pip)
     response_iterator = stub.Execute(request)
 
     # 実行結果（リアルタイム）を受け取る
@@ -213,27 +213,27 @@ def _validate_run_name(run_name):
     return run_name
 
 
-def _convert_pip_req(pip_req, source):
+def _convert_req_pip(req_pip, source):
     """
-    --PIP_REQ のローカルパスを、サーバ側（作業ディレクトリ起点）の相対パスへ変換する（ISS-00319）。
+    --REQ_PIP のローカルパスを、サーバ側（作業ディレクトリ起点）の相対パスへ変換する（ISS-00319）。
 
     0.5.0 で --SOURCE が**階層を保持して**転送されるようになったため（ISS-00197）、
     変換は「作業ディレクトリ起点の相対パスへ正規化する」だけになった。
-    | --SOURCE work/pip_pkg + --PIP_REQ ./work/pip_pkg/req_pip.txt -> work/pip_pkg/req_pip.txt |
+    | --SOURCE work/pip_pkg + --REQ_PIP ./work/pip_pkg/req_pip.txt -> work/pip_pkg/req_pip.txt |
     （0.4.x までは basename 起点で `pip_pkg/req_pip.txt` になっていた）
 
     --SOURCE 配下に無いパスを指定した場合は、転送されないまま実行されるのを防ぐため
     ValueError を raise する（[[ISS-00197]] と同じ「静かに迷子にならない」方針）。
     """
-    if not pip_req:
+    if not req_pip:
         return ""
 
     #-- 作業ディレクトリ以下であることを文字列で検証して正規化する
     #   （symlink を辿らないよう resolve() は使わない。_validate_path と同じ方針）
-    req_rel = _validate_path(pip_req, "--PIP_REQ")
+    req_rel = _validate_path(req_pip, "--REQ_PIP")
 
     if not (Path("./") / req_rel).is_file():
-        raise ValueError(f"--PIP_REQ file not found: {pip_req}")
+        raise ValueError(f"--REQ_PIP file not found: {req_pip}")
 
     #-- --SOURCE のいずれかの配下にあることを確認する（source は検証・正規化済み）
     for f in source.split(" "):
@@ -243,8 +243,8 @@ def _convert_pip_req(pip_req, source):
             return Path(req_rel).as_posix()
 
     raise ValueError(
-        f"--PIP_REQ must be located under --SOURCE (so that it is transferred): "
-        f"pip_req={pip_req!r}, source={source!r}")
+        f"--REQ_PIP must be located under --SOURCE (so that it is transferred): "
+        f"req_pip={req_pip!r}, source={source!r}")
 
 
 def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
@@ -262,7 +262,7 @@ def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
     return _filter
 
 
-def run(target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name="", pip_req="", tool_req="", vm_req="", keep_archive=False):
+def run(target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name="", req_pip="", req_tool="", req_vm="", keep_archive=False):
     # gRPCチャンネルを作成
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
@@ -290,27 +290,27 @@ def run(target="help", server_ip="localhost", server_port="8765", client_key=Non
     #--
     stub = file_service_pb2_grpc.FileServiceStub(channel)
 
-    # ======== --PIP_REQ のパス変換 ========
+    # ======== --REQ_PIP のパス変換 ========
     # ローカル表記のパスを、サーバ側（作業ディレクトリ起点）の相対パスへ変換する（ISS-00319）。
     # 実体は tar で届くので、--SOURCE 配下であることをここで検証して停止する。
-    pip_req_remote = ""
-    if pip_req:
-        pip_req_remote = _convert_pip_req(pip_req, source)
-        msg=f"PIP_REQ: {pip_req} -> {pip_req_remote}"
+    req_pip_remote = ""
+    if req_pip:
+        req_pip_remote = _convert_req_pip(req_pip, source)
+        msg=f"REQ_PIP: {req_pip} -> {req_pip_remote}"
         print(f"[{ip_port}]:{msg}")
 
-    # ======== --TOOL_REQ / --VM_REQ の読み込み ========
+    # ======== --REQ_TOOL / --REQ_VM の読み込み ========
     # 要求はファイルの「中身」を RequestResource で送る（tar には乗せない）。
     # Upload より前に要求を出す必要があるため。未指定なら送るデータは無い。
-    tool_req_text = _read_req_file(tool_req, "--TOOL_REQ", ip_port)
-    vm_req_text   = _read_req_file(vm_req,   "--VM_REQ",   ip_port)
+    req_tool_text = _read_req_file(req_tool, "--REQ_TOOL", ip_port)
+    req_vm_text   = _read_req_file(req_vm,   "--REQ_VM",   ip_port)
 
     # ======== リソース要求（0.5.0）========
     # client が要求を出し、server が「実際の対応」を返す。
     # broker 介在時は VM が用意できるまで PROGRESS が流れる。
     print(f"[{ip_port}]:Resource: request")
     session_id, _spec = request_resource(stub, ip_port,
-                                         req_tool=tool_req_text, vm_info=vm_req_text)
+                                         req_tool=req_tool_text, req_vm=req_vm_text)
 
     # ======== SOURCEファイル準備 ========
     # ディレクトリをtar.gzに圧縮
@@ -360,10 +360,10 @@ def run(target="help", server_ip="localhost", server_port="8765", client_key=Non
 
     # ======== CMD処理 ========
     # コマンドを送信し、出力をリアルタイムで受け取る
-    if pip_req_remote:
-      print(f"[{ip_port}]:Upload: pip install -r={pip_req_remote}")
+    if req_pip_remote:
+      print(f"[{ip_port}]:Upload: pip install -r={req_pip_remote}")
     print(f"[{ip_port}]:Upload: Execute target={target}")
-    execute(stub, ip_port, session_id, target, pip_req=pip_req_remote)
+    execute(stub, ip_port, session_id, target, req_pip=req_pip_remote)
 
     # ======== RESULT受信処理 ========
     # 実行結果の有無をチェック
@@ -414,21 +414,20 @@ def main():
 
     pars = argparse.ArgumentParser()
     pars.add_argument('-v',"--version"     ,action='version', version=f'%(prog)s {__version__}')
-    pars.add_argument('--CMD'         ,type=str ,default="charao -h"  ,help="command & parameters to module.")
     pars.add_argument('--SERVER_IP'   ,type=str ,default="127.0.0.1"  ,help="IP address of RPC server")
     pars.add_argument('--SERVER_PORT' ,type=str ,default="8766"       ,help="TCP port of RPC server")
+    pars.add_argument('--TLS_CONFIG_DIR'    ,default=""  ,help="TLS configuration directory. if empty, Connection not use TLS.")
+    pars.add_argument('--REQ_PIP'        ,type=str ,default=""                  ,help="requirements file for 'pip install -r' on the server (recommended name: req_pip.txt). Must be located under --SOURCE. Empty=not sent.")
+    pars.add_argument('--REQ_TOOL'       ,type=str ,default=""                  ,help="requirements-style file listing required tools, e.g. 'ngspice>=41' (recommended name: req_tool.txt). Its content is sent with the resource request. Empty=not sent.")
+    pars.add_argument('--REQ_VM'         ,type=str ,default=""                  ,help="TOML file describing the VM resources you need, incl. the preferred queue (recommended name: req_vm.toml). Its content is sent with the resource request and used by a broker; a direct server ignores it. Empty=not sent.")
     pars.add_argument('--SOURCE'         ,type=str ,default=["source"] ,nargs="+" ,help="source directory used in make command.")
-    pars.add_argument('--RESULT'         ,type=str ,default=["build"]  ,nargs="+" ,help="result directory output by make command.")
     pars.add_argument('--SOURCE_INCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Include only files with these extensions in SOURCE (e.g. .cdl .sp). Empty=all files.")
     pars.add_argument('--SOURCE_EXCLUDE' ,type=str ,default=[]         ,nargs="*" ,help="Exclude files with these extensions from SOURCE (e.g. .gds .gds2).")
     pars.add_argument('--SOURCE_MATCH'   ,type=str ,default=[]         ,nargs="+" ,help="Include only files whose path contains any of these strings (e.g. gf180mcuC). Empty=all files.")
+    pars.add_argument('--RESULT'         ,type=str ,default=["build"]  ,nargs="+" ,help="result directory output by make command.")
+    pars.add_argument('--CMD'         ,type=str ,default="charao -h"  ,help="command & parameters to module.")
     pars.add_argument('--RUN_NAME'       ,type=str ,default=""                  ,help="Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution.")
-    pars.add_argument('--PIP_REQ'        ,type=str ,default=""                  ,help="requirements file for 'pip install -r' on the server (recommended name: req_pip.txt). Must be located under --SOURCE. Empty=not sent.")
-    pars.add_argument('--TOOL_REQ'       ,type=str ,default=""                  ,help="requirements-style file listing required tools, e.g. 'ngspice>=41' (recommended name: req_tool.txt). Its content is sent with the resource request. Empty=not sent.")
-    pars.add_argument('--VM_REQ'         ,type=str ,default=""                  ,help="TOML file describing the VM resources you need, incl. the preferred queue (recommended name: req_vm.toml). Its content is sent with the resource request and used by a broker; a direct server ignores it. Empty=not sent.")
     pars.add_argument('--KEEP_ARCHIVE'   ,action="store_true"                    ,help="keep _source.tar.gz / _result.tar.gz after the run (default: remove). For debugging what was actually sent and received.")
-    pars.add_argument('--TLS_CONFIG_DIR'    ,default=""  ,help="TLS configuration directory. if empty, Connection not use TLS.")
-    
     args = pars.parse_args()
 
     # TLS setting
@@ -483,7 +482,7 @@ def main():
 
     #
     # 引数の指定ミス（--RUN_NAME の書式、--SOURCE / --RESULT が作業ディレクトリの外、
-    # --PIP_REQ が SOURCE 外・不在、--TOOL_REQ のファイル不在）は、利用者が読める 1 行の
+    # --REQ_PIP が SOURCE 外・不在、--REQ_TOOL / --REQ_VM のファイル不在）は、読める 1 行の
     # エラーで止める（トレースバックを出さない。TLS ファイル不在時の表示スタイルに合わせる）
     try:
       # RUN_NAME の検証（空文字列はOK、それ以外は 1 階層のディレクトリ名のみ許可）
@@ -508,9 +507,9 @@ def main():
           source_exclude =source_exclude,
           source_match   =source_match,
           run_name       =run_name,
-          pip_req        =args.PIP_REQ,
-          tool_req       =args.TOOL_REQ,
-          vm_req         =args.VM_REQ,
+          req_pip        =args.REQ_PIP,
+          req_tool       =args.REQ_TOOL,
+          req_vm         =args.REQ_VM,
           keep_archive   =args.KEEP_ARCHIVE)
     except (ValueError, RuntimeError) as e:
       print(f"ERROR: {e}")

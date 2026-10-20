@@ -33,8 +33,8 @@ message DataChunk {
 // リソース要求
 //-- リクエスト
 message ResourceRequest {
-    string req_tool = 1;  // req_tool.txt の中身（ツール要求。--TOOL_REQ 未指定なら空）
-    string vm_info  = 2;  // req_vm.toml の中身（VM 要求。キュー種別も含む。--VM_REQ 未指定なら空）
+    string req_tool = 1;  // req_tool.txt の中身（ツール要求。--REQ_TOOL 未指定なら空）
+    string req_vm   = 2;  // req_vm.toml の中身（VM 要求。キュー種別も含む。--REQ_VM 未指定なら空）
                           // どちらも server は無視する。broker が VM 選定に使う
 }
 
@@ -93,7 +93,7 @@ message UploadResponse {
 message ExecuteRequest {
     string session_id  = 1;  // <server_ip>/<work_id>
     string command_opt = 2;  // 実行するコマンドオプション
-    string pip_req     = 3;  // requirements の相対パス（作業ディレクトリ起点、未指定なら空）
+    string req_pip     = 3;  // requirements の相対パス（作業ディレクトリ起点、未指定なら空）
 }
 
 //-- レスポンス

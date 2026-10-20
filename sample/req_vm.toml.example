@@ -1,4 +1,4 @@
-# --VM_REQ で指定する VM 要求の例（TOML）。
+# --REQ_VM で指定する VM 要求の例（TOML）。
 #
 # 中身が RequestResource で送られる。**broker が VM を調達するための要求**で、
 # 直結サーバは無視する。client は中身を読んで送るだけでパースしない。
