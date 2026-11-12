@@ -8,8 +8,9 @@ __pycache__/
 venv/
 .venv/
 
-# Local debug script (per-developer)
+# Local scripts (per-developer)
 debug_run.sh
+commit.sh
 
 # Build artifacts
 build/
