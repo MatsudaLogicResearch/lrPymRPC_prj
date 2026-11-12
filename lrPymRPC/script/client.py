@@ -19,7 +19,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.5.0.a02"
+__version__ = "0.5.0"
 
 #-- req_tool.txt の 1 行からツール名だけを取り出す（pip requirements と同じ記法）
 _REQ_NAME_RE = re.compile(r"^\s*([A-Za-z0-9._-]+)")
