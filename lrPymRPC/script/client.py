@@ -19,7 +19,7 @@ from pathlib import Path
 #from proto import file_service_pb2, file_service_pb2_grpc
 from lrPymRPC.proto import file_service_pb2, file_service_pb2_grpc
 
-__version__ = "0.5.0"
+__version__ = "0.5.2"
 
 #-- req_tool.txt の 1 行からツール名だけを取り出す（pip requirements と同じ記法）
 _REQ_NAME_RE = re.compile(r"^\s*([A-Za-z0-9._-]+)")
@@ -111,10 +111,28 @@ def request_resource(stub, ip_port, req_tool="", req_vm=""):
     return session_id, spec
 
 
-def upload(stub, ip_port, session_id, tar_gz_path):
+def upload(stub, ip_port, session_id, tar_gz_path, local_paths=None):
+    """
+    tar.gz をチャンクに分けてサーバーへ送る。
+
+    local_paths（0.5.2 新規、ISS-00346）は **read-only で開いてほしいパス**で、
+    gRPC metadata の `local-path` として送る（**proto は変更していない**ので旧サーバとも通る）。
+    **サーバが受け付けるのは `--BROKER_IP` と一致する送信元からの指定だけ**で、
+    それ以外から送っても無視される。通常の client 利用では指定不要。
+    """
+    # gRPC metadata の値は **ASCII の印字可能文字に限る**。非 ASCII を渡すと分かりにくい
+    # 例外になるので、ここで弾いて理由を示す。
+    for p in (local_paths or []):
+        if not p.isascii():
+            raise ValueError(f"--LOCAL_PATH must be ASCII (gRPC metadata limitation): {p}")
+
+    metadata = [("local-path", p) for p in (local_paths or [])]
+    if metadata:
+        print(f"[{ip_port}]:Upload: local-path={','.join(p for _, p in metadata)}")
+
     # tar.gz ファイルをチャンクに分けてサーバーへ送信
     with open(tar_gz_path, 'rb') as f:
-        response = stub.Upload(chunk_file(f, session_id))
+        response = stub.Upload(chunk_file(f, session_id), metadata=metadata or None)
 
     # UploadResponse から返された session_id（<server_ip>/<work_id>）を取得
     return response.session_id
@@ -262,7 +280,7 @@ def _make_tar_filter(include_exts, exclude_exts, match_patterns=None):
     return _filter
 
 
-def run(target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name="", req_pip="", req_tool="", req_vm="", keep_archive=False):
+def run(target="help", server_ip="localhost", server_port="8765", client_key=None, client_crt=None, ca_crt=None, source="source", result="build", source_include=None, source_exclude=None, source_match=None, run_name="", req_pip="", req_tool="", req_vm="", keep_archive=False, local_path=None):
     # gRPCチャンネルを作成
     #channel = grpc.insecure_channel('localhost:50052')
     #channel = grpc.insecure_channel('localhost:8765')
@@ -355,7 +373,7 @@ def run(target="help", server_ip="localhost", server_port="8765", client_key=Non
     # （<server_ip> → <server_ip>/<work_id>）
     print(f"[{ip_port}]:Upload")
 
-    session_id = upload(stub, ip_port, session_id, source_gz)
+    session_id = upload(stub, ip_port, session_id, source_gz, local_paths=local_path)
     print(f"[{ip_port}]:Upload: session_id={session_id}")
 
     # ======== CMD処理 ========
@@ -428,6 +446,7 @@ def main():
     pars.add_argument('--CMD'         ,type=str ,default="charao -h"  ,help="command & parameters to module.")
     pars.add_argument('--RUN_NAME'       ,type=str ,default=""                  ,help="Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution.")
     pars.add_argument('--KEEP_ARCHIVE'   ,action="store_true"                    ,help="keep _source.tar.gz / _result.tar.gz after the run (default: remove). For debugging what was actually sent and received.")
+    pars.add_argument('--LOCAL_PATH'     ,type=str ,default=[]         ,nargs="*" ,help="absolute paths on the SERVER you want mounted read-only, sent as 'local-path' gRPC metadata on Upload. ONLY a broker (the address the server was started with as --BROKER_IP) may narrow the paths this way; from anywhere else it is ignored. ASCII only, 8KB total (gRPC metadata limit). Normally not needed.")
     args = pars.parse_args()
 
     # TLS setting
@@ -510,7 +529,8 @@ def main():
           req_pip        =args.REQ_PIP,
           req_tool       =args.REQ_TOOL,
           req_vm         =args.REQ_VM,
-          keep_archive   =args.KEEP_ARCHIVE)
+          keep_archive   =args.KEEP_ARCHIVE,
+          local_path     =args.LOCAL_PATH)
     except (ValueError, RuntimeError) as e:
       print(f"ERROR: {e}")
       sys.exit(1)
