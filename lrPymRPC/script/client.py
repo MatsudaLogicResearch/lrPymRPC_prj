@@ -115,10 +115,9 @@ def upload(stub, ip_port, session_id, tar_gz_path, local_paths=None):
     """
     tar.gz をチャンクに分けてサーバーへ送る。
 
-    local_paths（0.5.2 新規、ISS-00346）は **read-only で開いてほしいパス**で、
-    gRPC metadata の `local-path` として送る（**proto は変更していない**ので旧サーバとも通る）。
-    **サーバが受け付けるのは `--BROKER_IP` と一致する送信元からの指定だけ**で、
-    それ以外から送っても無視される。通常の client 利用では指定不要。
+    local_paths（0.5.2 新規）は **broker 用の予約オプション**で、gRPC metadata の
+    `local-path` として送る（proto は変更していないので旧サーバとも通る）。
+    扱いはサーバ側の設定次第。通常の client 利用では指定不要。
     """
     # gRPC metadata の値は **ASCII の印字可能文字に限る**。非 ASCII を渡すと分かりにくい
     # 例外になるので、ここで弾いて理由を示す。
@@ -446,7 +445,7 @@ def main():
     pars.add_argument('--CMD'         ,type=str ,default="charao -h"  ,help="command & parameters to module.")
     pars.add_argument('--RUN_NAME'       ,type=str ,default=""                  ,help="Isolate this run under ./<RUN_NAME>/ (single dir name, no slashes). Empty=current dir (backward compatible). For parallel execution.")
     pars.add_argument('--KEEP_ARCHIVE'   ,action="store_true"                    ,help="keep _source.tar.gz / _result.tar.gz after the run (default: remove). For debugging what was actually sent and received.")
-    pars.add_argument('--LOCAL_PATH'     ,type=str ,default=[]         ,nargs="*" ,help="absolute paths on the SERVER you want mounted read-only, sent as 'local-path' gRPC metadata on Upload. ONLY a broker (the address the server was started with as --BROKER_IP) may narrow the paths this way; from anywhere else it is ignored. ASCII only, 8KB total (gRPC metadata limit). Normally not needed.")
+    pars.add_argument('--LOCAL_PATH'     ,type=str ,default=[]         ,nargs="*" ,help="reserved for brokers. Normally not needed.")
     args = pars.parse_args()
 
     # TLS setting

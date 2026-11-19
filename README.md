@@ -242,23 +242,13 @@ back, rather than guessing.
 ## The sandbox only sees the work directory
 
 **From server 0.5.0 on, a command can neither read nor write anything outside its session work
-directory.** PDK data, EDA installs and everything else on the server are invisible unless the
-**server operator** lists them in `--WHITE_RO_LIST_FILE`, and even then they are **read-only**.
+directory.** PDK data, EDA installs and everything else on the server stay invisible unless the
+**server operator** has granted read-only access to them.
 
 If a run that used to work now fails with `Permission denied` or `No such file or directory` on a
-PDK or tool path, that list is what needs updating - nothing on the client side will fix it.
+PDK or tool path, **ask the server operator** - nothing on the client side will fix it.
 
-### `--LOCAL_PATH` (brokers only)
-
-`--LOCAL_PATH /opt/pdk/sky130A /opt/or-tools/lib` asks the server to open **just those paths**
-out of its list, for this upload. It is sent as `local-path` gRPC metadata on `Upload`.
-
-**The server honours it only from the address it was started with as `--BROKER_IP`.** Sent from
-anywhere else it is ignored (the server logs a warning), so **ordinary runs never need it** - it
-exists for a broker that hands out narrower access per request.
-
-Values must be **ASCII** (a gRPC metadata rule; the client raises `ValueError` otherwise) and all
-headers together stay under **8KB** - about 50 chars x 20 paths is 1KB.
+> `--LOCAL_PATH` is **reserved for brokers** and does nothing on an ordinary run.
 
 ## Server-side limits you may hit
 
